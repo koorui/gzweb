@@ -28,7 +28,9 @@
 
 #include <gazebo/msgs/msgs.hh>
 #include <gazebo/transport/TransportIface.hh>
-
+#include <gazebo/physics/World.hh>
+#include <gazebo/physics/physics.hh>
+#include <sdf/sdf.hh>
 
 namespace gzweb
 {
@@ -458,12 +460,19 @@ namespace gzweb
     /// \brief True if there is a client connection.
     private: bool isConnected = false;
 
+    private: gazebo::physics::WorldPtr world;
+
     public: void SetPoseFilterMinimumDistanceSquared(double _m);
     public: double GetPoseFilterMinimumDistanceSquared();
     public: void SetPoseFilterMinimumQuaternionSquared(double _m);
     public: double GetPoseFilterMinimumQuaternionSquared();
     public: void SetPoseFilterMinimumMsgAge(double _m);
     public: double GetPoseFilterMinimumMsgAge();
+
+    /// \brief 保存当前场景到SDF文件
+    /// \param[in] _filename 保存的文件名
+    /// \return 是否保存成功
+    public: bool SaveSceneToSDF(const std::string &_filename);
   };
 }
 

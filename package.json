@@ -16,17 +16,18 @@
     "update": "./node_modules/.bin/grunt build && cd build && cmake ..",
     "update-dev": "./node_modules/.bin/grunt concat && cd build && cmake ..",
     "start": "if [ $npm_config_port ]; then port=$npm_config_port; fi; cd gzbridge && ./server.js $port",
-    "deploy": "if [ $npm_config_deploy_op ]; then ./deploy.sh -$npm_config_deploy_op; else ./deploy.sh; fi;",
+    "deploy": "./deploy.sh",
     "docs": "./node_modules/.bin/grunt doc",
     "coverage": "codecov"
   },
   "dependencies": {
+    "express": "^4.17.1",
     "fs": "0.0.1-security",
     "http": "0.0.0",
     "nan": "^2.14.2",
     "node-gyp": "6.1.0",
     "path": "^0.12.7",
-    "websocket": "^1.0.25"
+    "websocket": "^1.0.35"
   },
   "devDependencies": {
     "catharsis": "^0.8.9",

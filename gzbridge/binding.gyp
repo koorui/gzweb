@@ -2,11 +2,18 @@
   "targets": [
     {
       "target_name": "gzbridge",
-      "sources": [ "GZNode.cc", "GZNode.hh",
-        "GazeboInterface.cc", "GazeboInterface.hh",
-        "pb2json.cc", "pb2json.hh",
-        "ConfigLoader.cc", "ConfigLoader.hh",
-        "OgreMaterialParser.cc", "OgreMaterialParser.hh"],
+      "sources": [
+        "GZNode.cc",
+        "GazeboInterface.cc",
+        "GZNode.hh",
+        "GazeboInterface.hh",
+        "pb2json.cc",
+        "pb2json.hh",
+        "ConfigLoader.cc",
+        "ConfigLoader.hh",
+        "OgreMaterialParser.cc",
+        "OgreMaterialParser.hh"
+      ],
       "include_dirs" : [
         "<!(node -e \"require('nan')\")"
       ],

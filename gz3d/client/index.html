@@ -972,6 +972,44 @@
             </div>
           </div>
         </div>
+
+        <!-- 导入面板 -->
+        <div ng-controller="importControl" class="panelsGroup">
+          <div id="importMenu" class="leftPanels ui-overlay-shadow">
+            <div class="clickable panelTitle closePanels">
+              <h3>导入 SDF 文件</h3>
+            </div>
+            <div class="panelContent">
+              <div class="importSection">
+                <input type="file" 
+                      id="sdfFileInput" 
+                      accept=".sdf,.world"
+                      style="display: none;">
+                <button class="ui-btn" onclick="document.getElementById('sdfFileInput').click()">
+                  选择 SDF 文件
+                </button>
+                <div id="importStatus" class="status-message"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 导出面板 -->
+        <div ng-controller="exportControl" class="panelsGroup">
+          <div id="exportMenu" class="leftPanels ui-overlay-shadow">
+            <div class="clickable panelTitle closePanels">
+              <h3>导出 SDF 文件</h3>
+            </div>
+            <div class="panelContent">
+              <div class="exportSection">
+                <button class="ui-btn" ng-click="exportScene()">
+                  导出当前场景
+                </button>
+                <div id="exportStatus" class="status-message"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <!-- left panel -->
 
@@ -979,6 +1017,8 @@
       <a id="mainMenuTab" class="gzGUI tab clickable"><img src="style/images/bars.png" title="Menu"></a>
       <a id="treeMenuTab" class="gzGUI tab clickable"><img src="style/images/tree.png" title="Scene Tree"></a>
       <a id="insertMenuTab" class="gzGUI tab clickable"><img src="style/images/insert.png" title="Insert"></a>
+      <a id="importMenuTab" class="gzGUI tab clickable"><img src="style/images/upload.png" title="Import SDF"></a>
+      <a id="exportMenuTab" class="gzGUI tab clickable"><img src="style/images/download.png" title="Export SDF"></a>
       <!-- tabs -->
 
       <!-- header -->

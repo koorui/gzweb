@@ -24,14 +24,15 @@ def copy_models(src, dst):
 
 
 dest_dir = sys.argv[1]
-
+# dest_dir = "/home/koorui/gzweb/test"
 
 print("copying local models to %s" % dest_dir)
-
+# print(os.environ['GAZEBO_MODEL_PATH'])
 unique_paths = None
 try:
-    gazebo_path =  os.environ['GAZEBO_MODEL_PATH'].split(':')
-
+    # gazebo_path =  os.environ['GAZEBO_MODEL_PATH'].split(':')
+    gazebo_path = ["/usr/share/gazebo-11/models"]
+    print(gazebo_path);
     model_paths = [x for x in gazebo_path if os.path.isdir(x)]
     unique_paths = list(set(model_paths))
 except:
@@ -56,8 +57,8 @@ def copy_resources(src, dst):
 
 unique_paths = None
 try:
-    resource_path =  os.environ['GAZEBO_RESOURCE_PATH'].split(':')
-
+    # resource_path =  os.environ['GAZEBO_RESOURCE_PATH'].split(':')
+    resource_path = ["/usr/share/gazebo-11"]
     resource_paths = [x for x in resource_path if os.path.isdir(x)]
     unique_paths = list(set(resource_paths))
 except:

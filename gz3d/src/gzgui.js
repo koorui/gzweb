@@ -586,6 +586,8 @@ $(function()
       {
         globalEmitter.emit('show_grid', 'toggle');
         globalEmitter.emit('closeTabs', false);
+        console.log('Grid visibility:', scene.grid.visible);
+        console.log('Grid object:', scene.grid);
       });
   $('#view-collisions').click(function()
       {
@@ -895,6 +897,77 @@ gzangular.controller('insertControl', ['$scope', function($scope)
   };
 }]);
 
+// 导入控制器
+gzangular.controller('importControl', ['$scope', function($scope) {
+  $scope.importSDF = function() {
+    try {
+      $('#sdfFileInput').click();
+    } catch(error) {
+      console.error('导入错误:', error);
+      $('#importStatus').text('触发文件选择失败').css('color', 'red');
+    }
+  };
+  
+  // 初始化文件输入监听
+  $('#sdfFileInput').on('change', function(event) {
+    if (!event.target || !event.target.files) {
+      $('#importStatus').text('未选择文件').css('color', 'red');
+      return;
+    }
+
+    const file = event.target.files[0];
+    if (!file) {
+      $('#importStatus').text('未选择文件').css('color', 'red');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        if (!e.target || !e.target.result) {
+          throw new Error('读取文件失败');
+        }
+        const sdfContent = e.target.result;
+        if (typeof sdfContent !== 'string') {
+          throw new Error('文件内容格式错误');
+        }
+        
+        // 发送事件前检查 globalEmitter 是否存在
+        if (typeof globalEmitter === 'undefined') {
+          throw new Error('globalEmitter未定义');
+        }
+        
+        globalEmitter.emit('import_sdf', sdfContent);
+        $('#importStatus').text('导入成功!').css('color', 'green');
+      } catch (error) {
+        console.error('导入错误:', error);
+        $('#importStatus').text('导入失败: ' + error.message).css('color', 'red');
+      }
+    };
+
+    reader.onerror = function(error) {
+      console.error('文件读取错误:', error);
+      $('#importStatus').text('文件读取失败').css('color', 'red');
+    };
+
+    reader.readAsText(file);
+  });
+}]);
+
+// 导出控制器
+gzangular.controller('exportControl', ['$scope', function($scope) {
+  $scope.exportSDF = function() {
+    try {
+      if (typeof globalEmitter === 'undefined') {
+        throw new Error('globalEmitter未定义');
+      }
+      globalEmitter.emit('export_sdf_request');
+    } catch (error) {
+      console.error('导出错误:', error);
+      $('#exportStatus').text('导出失败: ' + error.message).css('color', 'red');
+    }
+  };
+}]);
 
 /**
  * Graphical user interface
@@ -1629,6 +1702,36 @@ GZ3D.Gui = function(scene)
         that.setSimTime(stats);
       }
   );
+
+  // 在 GZ3D.Gui 构造函数中添加
+  this.emitter.on('import_sdf', function(sdfContent) {
+    that.scene.importSDF(sdfContent);
+  });
+
+  this.emitter.on('export_sdf_request', function() {
+    try {
+      const sdfContent = that.scene.exportSDF();
+      
+      // 创建下载
+      const blob = new Blob([sdfContent], {type: 'text/plain'});
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'scene.sdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      // 可选：发送到服务器
+      that.saveToServer(sdfContent);
+      
+      $('#exportStatus').text('导出成功!').css('color', 'green');
+    } catch (error) {
+      console.error('导出错误:', error);
+      $('#exportStatus').text('导出失败: ' + error).css('color', 'red');
+    }
+  });
 };
 
 /**
@@ -2483,4 +2586,28 @@ var formatTime = function(time)
   timeValue += ('00' + timeMsec.toFixed(0)).slice(-3);
 
   return timeValue;
+};
+
+GZ3D.Gui.prototype.saveToServer = function(sdfContent) {
+  fetch('/api/save-sdf', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      sdf: sdfContent
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      $('#exportStatus').text('已保存到服务器!').css('color', 'green');
+    } else {
+      $('#exportStatus').text('服务器保存失败: ' + data.message).css('color', 'red');
+    }
+  })
+  .catch(error => {
+    console.error('服务器错误:', error);
+    $('#exportStatus').text('服务器连接失败!').css('color', 'red');
+  });
 };

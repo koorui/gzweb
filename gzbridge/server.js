@@ -6,7 +6,20 @@ const WebSocketServer = require('websocket').server;
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const gzbridge = require('./build/Debug/gzbridge');
+var gzbridge;
+try {
+  gzbridge = require('./build/Release/gzbridge');
+} catch (e) {
+  try {
+    gzbridge = require('./build/Debug/gzbridge');
+  } catch (e) {
+    console.error('无法加载 gzbridge 模块。请确保已经正确编译。');
+    console.error(e);
+    process.exit(1);
+  }
+}
+const express = require('express');
+const gznode = gzbridge;
 
 /**
  * Path from where the static site is served
@@ -192,3 +205,42 @@ if (gzNode.getIsGzServerConnected())
     }
   }
 }
+
+// 添加保存SDF的路由
+const app = express();
+
+app.post('/api/save-sdf', (req, res) => {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = path.join(__dirname, '../saved_models', `scene_${timestamp}.sdf`);
+    
+    // 确保保存目录存在
+    const dir = path.dirname(filename);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    // 调用C++层的保存函数
+    const success = gznode.saveScene(filename);
+    
+    if (success) {
+      res.json({
+        success: true,
+        message: '场景已保存',
+        filename: filename
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: '保存场景失败'
+      });
+    }
+  } catch (error) {
+    console.error('保存场景错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});

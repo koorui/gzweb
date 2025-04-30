@@ -142,6 +142,9 @@ GazeboInterface::GazeboInterface()
   this->messageCount = 0;
 
   this->isConnected = false;
+
+  // 初始化 world 指针为空
+  this->world.reset();
 }
 
 /////////////////////////////////////////////////
@@ -1279,4 +1282,124 @@ void GazeboInterface::SetPoseFilterMinimumMsgAge(double _m)
 double GazeboInterface::GetPoseFilterMinimumMsgAge()
 {
   return this->minimumMsgAge;
+}
+
+/////////////////////////////////////////////////
+bool GazeboInterface::SaveSceneToSDF(const std::string &_filename)
+{
+  // 获取当前世界
+  this->world = gazebo::physics::get_world();
+  
+  if (!this->world)
+  {
+    gzerr << "无法获取世界指针\n";
+    return false;
+  }
+
+  try
+  {
+    // 创建输出文件流
+    std::ofstream outFile(_filename.c_str());
+    if (!outFile.is_open())
+    {
+      gzerr << "无法打开文件: " << _filename << "\n";
+      return false;
+    }
+
+    // 写入 SDF 内容
+    outFile << "<?xml version='1.0'?>\n";
+    outFile << "<sdf version='" << SDF_VERSION << "'>\n";
+    outFile << "<world name='" << this->world->Name() << "'>\n";
+    
+    // 保存物理参数
+    gazebo::physics::PhysicsEnginePtr physics = this->world->Physics();
+    if (physics)
+    {
+      outFile << "<physics type='" << physics->GetType() << "'>\n";
+      outFile << "  <max_step_size>" << physics->GetMaxStepSize() << "</max_step_size>\n";
+      // 移除 real_time_factor，因为它是受保护的成员
+      outFile << "  <real_time_update_rate>" << physics->GetRealTimeUpdateRate() << "</real_time_update_rate>\n";
+      outFile << "</physics>\n";
+    }
+
+    // 保存场景环境
+    outFile << "<scene>\n";
+    outFile << "  <ambient>0.4 0.4 0.4 1</ambient>\n";
+    outFile << "  <background>0.7 0.7 0.7 1</background>\n";
+    outFile << "  <shadows>1</shadows>\n";
+    outFile << "</scene>\n";
+    
+    // 保存所有模型
+    for (const auto& model : this->world->Models())
+    {
+      if (model)
+      {
+        outFile << "<model name='" << model->GetName() << "'>\n";
+        // 保存模型位姿
+        const auto& pose = model->WorldPose();
+        outFile << "  <pose>" << pose.Pos().X() << " " << pose.Pos().Y() << " " << pose.Pos().Z()
+                << " " << pose.Rot().Roll() << " " << pose.Rot().Pitch() << " " << pose.Rot().Yaw() << "</pose>\n";
+        
+        // 保存模型的所有链接
+        for (const auto& link : model->GetLinks())
+        {
+          if (link)
+          {
+            outFile << "  <link name='" << link->GetName() << "'>\n";
+            const auto& linkPose = link->WorldPose();
+            outFile << "    <pose>" << linkPose.Pos().X() << " " << linkPose.Pos().Y() << " " << linkPose.Pos().Z()
+                    << " " << linkPose.Rot().Roll() << " " << linkPose.Rot().Pitch() << " " << linkPose.Rot().Yaw() << "</pose>\n";
+            outFile << "  </link>\n";
+          }
+        }
+        
+        outFile << "</model>\n";
+      }
+    }
+    
+    // 保存所有光源
+    for (const auto& light : this->world->Lights())
+    {
+      if (light)
+      {
+        outFile << "<light name='" << light->GetName() << "' type='" << light->GetType() << "'>\n";
+        const auto& pose = light->WorldPose();
+        outFile << "  <pose>" << pose.Pos().X() << " " << pose.Pos().Y() << " " << pose.Pos().Z()
+                << " " << pose.Rot().Roll() << " " << pose.Rot().Pitch() << " " << pose.Rot().Yaw() << "</pose>\n";
+        
+        // 使用 sdf::ElementPtr 来获取光源属性
+        sdf::ElementPtr lightSDF = light->GetSDF();
+        if (lightSDF)
+        {
+          // 复制光源的 SDF 属性
+          if (lightSDF->HasElement("diffuse"))
+          {
+            outFile << lightSDF->GetElement("diffuse")->ToString("");
+          }
+          if (lightSDF->HasElement("specular"))
+          {
+            outFile << lightSDF->GetElement("specular")->ToString("");
+          }
+          if (lightSDF->HasElement("attenuation"))
+          {
+            outFile << lightSDF->GetElement("attenuation")->ToString("");
+          }
+        }
+        
+        outFile << "</light>\n";
+      }
+    }
+    
+    outFile << "</world>\n";
+    outFile << "</sdf>";
+    outFile.close();
+    
+    gzmsg << "场景已保存到: " << _filename << "\n";
+    return true;
+  }
+  catch(const std::exception &e)
+  {
+    gzerr << "保存场景时出错: " << e.what() << "\n";
+    return false;
+  }
 }

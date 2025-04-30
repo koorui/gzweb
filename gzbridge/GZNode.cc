@@ -46,6 +46,35 @@ GZNode::~GZNode()
   gazebo::transport::fini();
 };
 
+
+NAN_METHOD(GZNode::SaveScene) {
+  v8::Isolate* isolate = info.GetIsolate();
+  v8::HandleScope scope(isolate);
+
+  // 检查参数
+  if (info.Length() < 1) {
+    Nan::ThrowTypeError("Wrong number of arguments");
+    return;
+  }
+
+  // 获取文件名参数
+  v8::String::Utf8Value filename(isolate, info[0]);
+  std::string filenameStr(*filename);
+
+  // 获取 GZNode 实例
+  GZNode* obj = Nan::ObjectWrap::Unwrap<GZNode>(info.Holder());
+  
+  // 使用 gzIface 而不是 gazebo
+  bool success = false;
+  if (obj->gzIface) {
+    success = obj->gzIface->SaveSceneToSDF(filenameStr);
+  }
+
+  // 返回结果
+  info.GetReturnValue().Set(success);
+}
+
+
 /////////////////////////////////////////////////
 NAN_MODULE_INIT(GZNode::Init)
 {
@@ -81,6 +110,8 @@ NAN_MODULE_INIT(GZNode::Init)
 
   Nan::SetPrototypeMethod(tpl, "getMaterialScriptsMessage",
       GetMaterialScriptsMessage);
+
+  Nan::SetPrototypeMethod(tpl, "saveScene", SaveScene);
 
   target->Set(Nan::GetCurrentContext(), class_name, 
     tpl->GetFunction(Nan::GetCurrentContext()).ToLocalChecked()
