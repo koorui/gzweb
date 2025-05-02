@@ -127,17 +127,24 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
 /**
  * Finish spawning an entity: re-enable camera controls,
  * remove listeners, remove temp object
+ * @param {boolean} cancel - 是否为取消插入
  */
-GZ3D.SpawnModel.prototype.finish = function()
+GZ3D.SpawnModel.prototype.finish = function(cancel)
 {
   var that = this;
 
-  this.domElement.removeEventListener( 'mousedown', that.mouseDown, false);
-  this.domElement.removeEventListener( 'mouseup', that.mouseUp, false);
-  this.domElement.removeEventListener( 'mousemove', that.mouseMove, false);
-  document.removeEventListener( 'keydown', that.keyDown, false);
+  this.domElement.removeEventListener('mousedown', that.mouseDown, false);
+  this.domElement.removeEventListener('mouseup', that.mouseUp, false);
+  this.domElement.removeEventListener('mousemove', that.mouseMove, false);
+  document.removeEventListener('keydown', that.keyDown, false);
 
-  this.scene.remove(this.obj);
+  this.domElement.removeEventListener('touchmove', that.touchMove, false);
+  this.domElement.removeEventListener('touchend', that.touchEnd, false);
+
+  // 只有取消时才移除
+  if (cancel && this.obj) {
+    this.scene.remove(this.obj);
+  }
   this.obj = undefined;
   this.active = false;
 };
@@ -226,6 +233,17 @@ GZ3D.SpawnModel.prototype.onMouseUp = function(event)
     return;
   }
 
+  // 恢复材质透明度
+  var restoreMaterial = function(object) {
+    object.traverse(function(child) {
+      if (child instanceof THREE.Mesh && child.material) {
+        child.material.opacity = 1.0;
+        child.material.transparent = false;
+      }
+    });
+  };
+  restoreMaterial(this.obj);
+
   this.callback(this.obj);
   this.finish();
 };
@@ -238,7 +256,7 @@ GZ3D.SpawnModel.prototype.onKeyDown = function(event)
 {
   if ( event.keyCode === 27 ) // Esc
   {
-    this.finish();
+    this.finish(true); // 取消插入，移除临时对象
   }
 };
 
@@ -304,4 +322,65 @@ GZ3D.SpawnModel.prototype.generateUniqueName = function(entity)
       return entity+'_'+i;
     }
   }
+};
+
+/**
+ * 以自定义Object3D对象为基础，进入"鼠标放置"插入模式
+ * @param {THREE.Object3D} obj
+ * @param {function} callback
+ */
+GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
+{
+  if (this.active)
+  {
+    this.finish();
+  }
+
+  this.callback = callback;
+  this.obj = obj;
+
+  // 生成唯一名称
+  this.obj.name = 'imported_' + Date.now() + '_' + Math.floor(Math.random()*10000);
+
+  // 可选：给模型加半透明材质
+  var setTransparent = function(object) {
+    object.traverse(function(child) {
+      if (child instanceof THREE.Mesh && child.material) {
+        child.material = child.material.clone();
+        child.material.transparent = true;
+        child.material.opacity = 0.5;
+      }
+    });
+  };
+  setTransparent(this.obj);
+
+  // 放到视野中央
+  var pos = new THREE.Vector2(window.innerWidth/2, window.innerHeight/2);
+  var intersect = new THREE.Vector3();
+  this.scene.getRayCastModel(pos, intersect);
+
+  this.obj.position.x = intersect.x;
+  this.obj.position.y = intersect.y;
+  this.obj.position.z += 0.5;
+
+  this.scene.add(this.obj);
+
+  // 事件监听与 start 一致
+  var that = this;
+  this.mouseDown = function(event) {that.onMouseDown(event);};
+  this.mouseUp = function(event) {that.onMouseUp(event);};
+  this.mouseMove = function(event) {that.onMouseMove(event);};
+  this.keyDown = function(event) {that.onKeyDown(event);};
+  this.touchMove = function(event) {that.onTouchMove(event,true);};
+  this.touchEnd = function(event) {that.onTouchEnd(event);};
+
+  this.domElement.addEventListener('mousedown', that.mouseDown, false);
+  this.domElement.addEventListener('mouseup', that.mouseUp, false);
+  this.domElement.addEventListener('mousemove', that.mouseMove, false);
+  document.addEventListener('keydown', that.keyDown, false);
+
+  this.domElement.addEventListener('touchmove', that.touchMove, false);
+  this.domElement.addEventListener('touchend', that.touchEnd, false);
+
+  this.active = true;
 };
