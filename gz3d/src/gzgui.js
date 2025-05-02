@@ -15,7 +15,7 @@ var isTallScreen = function()
       return $(window).height() / emUnits(1) > 35;
     };
 var lastOpenMenu = {mainMenu: 'mainMenu', insertMenu: 'insertMenu',
-    treeMenu: 'treeMenu'};
+    treeMenu: 'treeMenu', importMenu: 'importMenu', exportMenu: 'exportMenu'};
 
 var tabColors = {selected: 'rgb(34, 170, 221)', unselected: 'rgb(42, 42, 42)'};
 
@@ -899,73 +899,133 @@ gzangular.controller('insertControl', ['$scope', function($scope)
 
 // 导入控制器
 gzangular.controller('importControl', ['$scope', function($scope) {
-  $scope.importSDF = function() {
-    try {
-      $('#sdfFileInput').click();
-    } catch(error) {
-      console.error('导入错误:', error);
-      $('#importStatus').text('触发文件选择失败').css('color', 'red');
-    }
+  $scope.openImportPanel = function() {
+    globalEmitter.emit('openTab', 'importMenu', 'importMenu');
   };
   
-  // 初始化文件输入监听
-  $('#sdfFileInput').on('change', function(event) {
-    if (!event.target || !event.target.files) {
-      $('#importStatus').text('未选择文件').css('color', 'red');
-      return;
-    }
-
-    const file = event.target.files[0];
-    if (!file) {
-      $('#importStatus').text('未选择文件').css('color', 'red');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        if (!e.target || !e.target.result) {
-          throw new Error('读取文件失败');
-        }
-        const sdfContent = e.target.result;
-        if (typeof sdfContent !== 'string') {
-          throw new Error('文件内容格式错误');
-        }
-        
-        // 发送事件前检查 globalEmitter 是否存在
-        if (typeof globalEmitter === 'undefined') {
-          throw new Error('globalEmitter未定义');
-        }
-        
-        globalEmitter.emit('import_sdf', sdfContent);
-        $('#importStatus').text('导入成功!').css('color', 'green');
-      } catch (error) {
-        console.error('导入错误:', error);
-        $('#importStatus').text('导入失败: ' + error.message).css('color', 'red');
+  // 初始化必要的变量
+  $scope.importStatus = '';
+  
+  // 处理文件选择
+  $scope.handleFileSelect = function(event) {
+    try {
+      const file = event.target.files[0];
+      if (!file) {
+        $scope.importStatus = '未选择文件';
+        $scope.$apply();
+        return;
       }
-    };
 
-    reader.onerror = function(error) {
-      console.error('文件读取错误:', error);
-      $('#importStatus').text('文件读取失败').css('color', 'red');
-    };
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const sdfContent = e.target.result;
+          if (typeof sdfparser !== 'undefined' && sdfparser) {
+            // 判断SDF类型
+            let rootTag = '';
+            try {
+              // 用正则快速提取根标签
+              rootTag = sdfContent.match(/<\s*(model|light|world)\b/i)[1].toLowerCase();
+            } catch (err) {
+              rootTag = '';
+            }
+            if (rootTag === 'world') {
+              // 世界类型，直接导入
+              var obj = sdfparser.spawnFromSDF(sdfContent);
+              if (obj) {
+                if (typeof gui.scene.initScene === 'function') {
+                  gui.scene.initScene();
+                } else if (typeof gui.scene.clear === 'function') {
+                  gui.scene.clear();
+                } else {
+                  // 简单粗暴地移除所有子对象
+                  while (gui.scene.children.length > 0) {
+                    gui.scene.remove(gui.scene.children[0]);
+                  }
+                }
+                gui.scene.add(obj);
+                $scope.importStatus = '世界导入成功';
+              } else {
+                $scope.importStatus = 'SDF解析失败，未生成对象';
+              }
+            } else if (rootTag === 'model' || rootTag === 'light') {
+              // 缓存 SDF 内容，触发事件
+              window._importedSDFCache = sdfContent; // 全局缓存
+              globalEmitter.emit('imported_sdf_ready', {
+                sdf: sdfContent,
+                type: rootTag
+              });
+              $scope.importStatus = '请在场景中点击放置导入的模型/灯光';
+            } else {
+              var obj = sdfparser.spawnFromSDF(sdfContent);
+              gui.scene.add(obj);
+              $scope.importStatus = '未知类型，已追加到场景';
+            }
+          } else {
+            $scope.importStatus = 'SDF解析器未初始化';
+          }
+          $scope.$apply();
+        } catch (error) {
+          console.error('导入错误:', error);
+          $scope.importStatus = '导入失败: ' + error.message;
+          $scope.$apply();
+        }
+      };
 
-    reader.readAsText(file);
-  });
+      reader.onerror = function() {
+        $scope.importStatus = '文件读取失败';
+        $scope.$apply();
+      };
+
+      reader.readAsText(file);
+    } catch (error) {
+      console.error('文件选择错误:', error);
+      $scope.importStatus = '文件选择失败';
+      $scope.$apply();
+    }
+  };
 }]);
 
 // 导出控制器
 gzangular.controller('exportControl', ['$scope', function($scope) {
-  $scope.exportSDF = function() {
+  $scope.openExportPanel = function() {
+    globalEmitter.emit('openTab', 'exportMenu', 'exportMenu');
+  };
+  
+  // 初始化必要的变量
+  $scope.exportStatus = '';
+  
+  // 导出场景
+  $scope.exportScene = function() {
     try {
-      if (typeof globalEmitter === 'undefined') {
-        throw new Error('globalEmitter未定义');
+      if (typeof gui === 'undefined' || !gui.scene) {
+        $scope.exportStatus = '场景未准备好';
+        return;
       }
-      globalEmitter.emit('export_sdf_request');
+
+      const sdfContent = gui.scene.exportSDF();
+      if (!sdfContent) {
+        $scope.exportStatus = '导出失败：场景为空';
+        return;
+      }
+
+      // 创建并下载文件
+      const blob = new Blob([sdfContent], {type: 'text/plain'});
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'scene.sdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      $scope.exportStatus = '导出成功';
     } catch (error) {
       console.error('导出错误:', error);
-      $('#exportStatus').text('导出失败: ' + error.message).css('color', 'red');
+      $scope.exportStatus = '导出失败: ' + error.message;
     }
+    $scope.$apply();
   };
 }]);
 
@@ -1390,38 +1450,43 @@ GZ3D.Gui = function(scene)
   );
 
   this.emitter.on('openTab', function (id, parentId)
-      {
-        lastOpenMenu[parentId] = id;
+  {
+    lastOpenMenu[parentId] = id;
 
-        $('.leftPanels').hide();
-        $('#'+id).show();
+    $('.leftPanels').hide();
+    $('#'+id).show();
 
-        $('.tab').css('border-left-color', tabColors.unselected);
-        $('#'+parentId+'Tab').css('border-left-color', tabColors.selected);
+    $('.tab').css('border-left-color', tabColors.unselected);
+    $('#'+parentId+'Tab').css('border-left-color', tabColors.selected);
 
-        if (id.indexOf('propertyPanel-') >= 0)
-        {
-          var entityName = id.substring(id.indexOf('-')+1);
-          var object = that.scene.getByName(
-              convertNameId(entityName, true));
+    if (id.indexOf('propertyPanel-') >= 0)
+    {
+      var entityName = id.substring(id.indexOf('-')+1);
+      var object = that.scene.getByName(
+          convertNameId(entityName, true));
 
-          var stats = {};
-          stats.name = entityName;
+      var stats = {};
+      stats.name = entityName;
 
-          stats.pose = {};
-          stats.pose.position = {x: object.position.x,
-                                 y: object.position.y,
-                                 z: object.position.z};
-
-          stats.pose.orientation = {x: object.quaternion._x,
-                                    y: object.quaternion._y,
-                                    z: object.quaternion._z,
-                                    w: object.quaternion._w};
-        }
-
-        that.emitter.emit('resizePanel');
+      if (object) {
+        stats.pose = {
+          position: {
+            x: object.position.x,
+            y: object.position.y,
+            z: object.position.z
+          },
+          orientation: {
+            x: object.quaternion._x,
+            y: object.quaternion._y,
+            z: object.quaternion._z,
+            w: object.quaternion._w
+          }
+        };
       }
-  );
+    }
+
+    that.emitter.emit('resizePanel');
+  });
 
   this.emitter.on('closeTabs', function (force)
       {
@@ -1731,6 +1796,50 @@ GZ3D.Gui = function(scene)
       console.error('导出错误:', error);
       $('#exportStatus').text('导出失败: ' + error).css('color', 'red');
     }
+  });
+
+  // 初始化导入/导出功能
+  this.initImportExport();
+
+  this.emitter.on('imported_sdf_ready', function(data) {
+    // data.sdf: SDF字符串, data.type: 'model' 或 'light'
+    var obj = sdfparser.spawnFromSDF(data.sdf);
+    if (!obj) {
+      that.emitter.emit('notification_popup', 'SDF解析失败，未生成对象');
+      return;
+    }
+    // 进入插入模式
+    if (that.scene.spawnModel && typeof that.scene.spawnModel.startFromObject === 'function') {
+      that.scene.spawnModel.startFromObject(obj, function(placedObj) {
+        that.emitter.emit('entityCreated', placedObj, placedObj.name);
+        that.emitter.emit('notification_popup', '模型/灯光已放置');
+      });
+      that.emitter.emit('notification_popup', '请在场景中点击放置导入的模型/灯光');
+    } else {
+      // fallback: 直接添加
+      that.scene.add(obj);
+      that.emitter.emit('notification_popup', '直接添加到场景（未实现拖放）');
+    }
+  });
+};
+
+GZ3D.Gui.prototype.initImportExport = function() {
+  var that = this;
+  
+  // 处理导入/导出面板的显示
+  $('#importMenuTab').click(function() {
+    $('.leftPanels').hide();
+    $('#importMenu').show();
+  });
+  
+  $('#exportMenuTab').click(function() {
+    $('.leftPanels').hide();
+    $('#exportMenu').show();
+  });
+  
+  // 关闭面板
+  $('.closePanels').click(function() {
+    $(this).parent().hide();
   });
 };
 

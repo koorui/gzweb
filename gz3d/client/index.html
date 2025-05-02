@@ -973,40 +973,39 @@
           </div>
         </div>
 
-        <!-- 导入面板 -->
-        <div ng-controller="importControl" class="panelsGroup">
-          <div id="importMenu" class="leftPanels ui-overlay-shadow">
-            <div class="clickable panelTitle closePanels">
-              <h3>导入 SDF 文件</h3>
-            </div>
-            <div class="panelContent">
-              <div class="importSection">
-                <input type="file" 
-                      id="sdfFileInput" 
-                      accept=".sdf,.world"
-                      style="display: none;">
-                <button class="ui-btn" onclick="document.getElementById('sdfFileInput').click()">
-                  选择 SDF 文件
-                </button>
-                <div id="importStatus" class="status-message"></div>
-              </div>
+        <!-- 导入菜单 -->
+        <div id="importMenu" class="leftPanels">
+          <div class="clickable panelTitle">
+            <h3>导入 SDF</h3>
+            <img src="style/images/close.png" class="closePanels">
+          </div>
+          <div class="panelContent" ng-controller="importControl">
+            <div class="importSection">
+              <input type="file" 
+                     id="sdfFileInput" 
+                     accept=".sdf,.world"
+                     style="display: none;"
+                     onchange="angular.element(this).scope().handleFileSelect(event)">
+              <button class="ui-btn" onclick="document.getElementById('sdfFileInput').click()">
+                选择 SDF 文件
+              </button>
+              <div id="importStatus" class="status-message" ng-bind="importStatus"></div>
             </div>
           </div>
         </div>
 
-        <!-- 导出面板 -->
-        <div ng-controller="exportControl" class="panelsGroup">
-          <div id="exportMenu" class="leftPanels ui-overlay-shadow">
-            <div class="clickable panelTitle closePanels">
-              <h3>导出 SDF 文件</h3>
-            </div>
-            <div class="panelContent">
-              <div class="exportSection">
-                <button class="ui-btn" ng-click="exportScene()">
-                  导出当前场景
-                </button>
-                <div id="exportStatus" class="status-message"></div>
-              </div>
+        <!-- 导出菜单 -->
+        <div id="exportMenu" class="leftPanels">
+          <div class="clickable panelTitle">
+            <h3>导出 SDF</h3>
+            <img src="style/images/close.png" class="closePanels">
+          </div>
+          <div class="panelContent" ng-controller="exportControl">
+            <div class="exportSection">
+              <button class="ui-btn" ng-click="exportScene()">
+                导出当前场景
+              </button>
+              <div id="exportStatus" class="status-message" ng-bind="exportStatus"></div>
             </div>
           </div>
         </div>
