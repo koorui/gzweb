@@ -38,7 +38,7 @@ GZ3D.SpawnModel.prototype.init = function()
  */
 GZ3D.SpawnModel.prototype.start = function(entity, callback)
 {
-  console.log("fuck you???")
+  console.log("start you???")
   if (this.active)
   {
     console.log("Already in spawn mode, ignoring");
@@ -353,7 +353,7 @@ GZ3D.SpawnModel.prototype.generateUniqueName = function(entity)
  */
 GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 {
-  console.log("fuck me???")
+  console.log("startfromobject???")
   if (this.active)
   {
     console.log("Already in spawn mode, ignoring");
