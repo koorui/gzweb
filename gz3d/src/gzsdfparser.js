@@ -111,14 +111,14 @@ GZ3D.SdfParser.prototype.onConnectionError = function()
   this.scene.initScene();
 
   var that = this;
-  var entityCreated = function(model, type)
-  {
-    if (!that.gziface.isConnected)
-    {
-      that.addModelByType(model, type);
-    }
-  };
-  this.emitter.on('entityCreated', entityCreated);
+  // var entityCreated = function(model, type)
+  // {
+  //   if (!that.gziface.isConnected)
+  //   {
+  //     that.addModelByType(model, type);
+  //   }
+  // };
+  // this.emitter.on('entityCreated', entityCreated);
 
   var deleteEntity = function(entity)
   {

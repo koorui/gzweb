@@ -38,13 +38,19 @@ GZ3D.SpawnModel.prototype.init = function()
  */
 GZ3D.SpawnModel.prototype.start = function(entity, callback)
 {
+  console.log("fuck you???")
   if (this.active)
   {
-    this.finish();
+    console.log("Already in spawn mode, ignoring");
+    return;
+  }
+
+  // 清理之前的状态
+  if (this.obj) {
+    this.finish(true);
   }
 
   this.callback = callback;
-
   this.obj = new THREE.Object3D();
   var mesh;
   if (entity === 'box')
@@ -91,7 +97,9 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   this.obj.position.x = intersect.x;
   this.obj.position.y = intersect.y;
   this.obj.position.z += 0.5;
+  // console.log('插入前场景对象数：', this.scene.children.length);
   this.scene.add(this.obj);
+  // console.log('插入后场景对象数：', this.scene.children.length);
   // For the inserted light to have effect
   var allObjects = [];
   this.scene.scene.getDescendants(allObjects);
@@ -103,6 +111,7 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
     }
   }
 
+  // 事件监听与 startFromObject 一致
   var that = this;
 
   this.mouseDown = function(event) {that.onMouseDown(event);};
@@ -121,7 +130,6 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   this.domElement.addEventListener( 'touchend', that.touchEnd, false);
 
   this.active = true;
-
 };
 
 /**
@@ -133,20 +141,23 @@ GZ3D.SpawnModel.prototype.finish = function(cancel)
 {
   var that = this;
 
+  // 移除所有事件监听
   this.domElement.removeEventListener('mousedown', that.mouseDown, false);
   this.domElement.removeEventListener('mouseup', that.mouseUp, false);
   this.domElement.removeEventListener('mousemove', that.mouseMove, false);
   document.removeEventListener('keydown', that.keyDown, false);
-
   this.domElement.removeEventListener('touchmove', that.touchMove, false);
   this.domElement.removeEventListener('touchend', that.touchEnd, false);
 
-  // 只有取消时才移除
+  // 只有取消时才移除对象
   if (cancel && this.obj) {
     this.scene.remove(this.obj);
   }
+  
+  // 重置所有状态
   this.obj = undefined;
   this.active = false;
+  this.callback = undefined;
 };
 
 /**
@@ -217,6 +228,17 @@ GZ3D.SpawnModel.prototype.onTouchEnd = function()
   {
     return;
   }
+
+  // 恢复材质透明度
+  var restoreMaterial = function(object) {
+    object.traverse(function(child) {
+      if (child instanceof THREE.Mesh && child.material) {
+        child.material.opacity = 1.0;
+        child.material.transparent = false;
+      }
+    });
+  };
+  restoreMaterial(this.obj);
 
   this.callback(this.obj);
   this.finish();
@@ -310,18 +332,19 @@ GZ3D.SpawnModel.prototype.moveSpawnedModel = function(positionX, positionY)
  */
 GZ3D.SpawnModel.prototype.generateUniqueName = function(entity)
 {
+  // 添加时间戳确保唯一性
+  var timestamp = Date.now();
   var i = 0;
   while (i < 1000)
   {
-    if (this.scene.getByName(entity+'_'+i))
+    var name = entity + '_' + timestamp + '_' + i;
+    if (!this.scene.getByName(name))
     {
-      ++i;
+      return name;
     }
-    else
-    {
-      return entity+'_'+i;
-    }
+    ++i;
   }
+  return entity + '_' + timestamp + '_' + Math.floor(Math.random() * 1000);
 };
 
 /**
@@ -331,28 +354,29 @@ GZ3D.SpawnModel.prototype.generateUniqueName = function(entity)
  */
 GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 {
+  console.log("fuck me???")
   if (this.active)
   {
-    this.finish();
+    console.log("Already in spawn mode, ignoring");
+    return;
+  }
+
+  // 清理之前的状态
+  if (this.obj) {
+    this.finish(true);
   }
 
   this.callback = callback;
   this.obj = obj;
 
-  // 生成唯一名称
-  this.obj.name = 'imported_' + Date.now() + '_' + Math.floor(Math.random()*10000);
-
-  // 可选：给模型加半透明材质
-  var setTransparent = function(object) {
-    object.traverse(function(child) {
-      if (child instanceof THREE.Mesh && child.material) {
-        child.material = child.material.clone();
-        child.material.transparent = true;
-        child.material.opacity = 0.5;
-      }
+  // 递归唯一命名，避免多次导入name冲突
+  function setUniqueName(obj, prefix) {
+    obj.name = prefix + '_' + Date.now() + '_' + Math.floor(Math.random()*10000);
+    obj.children.forEach(function(child, idx) {
+      setUniqueName(child, prefix + '_child' + idx);
     });
-  };
-  setTransparent(this.obj);
+  }
+  setUniqueName(this.obj, 'imported');
 
   // 放到视野中央
   var pos = new THREE.Vector2(window.innerWidth/2, window.innerHeight/2);

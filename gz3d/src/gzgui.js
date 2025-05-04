@@ -382,10 +382,8 @@ $(function()
     var press_time_insert = 400;
     $('[id^="insert-entity-"]')
       .on('touchstart', function (event) {
-        var path = $(this).attr('id');
-        path = path.substring(14); // after 'insert-entity-'
         $(this).data('checkdown', setTimeout(function () {
-          globalEmitter.emit('longpress_insert_start', event, path);
+          globalEmitter.emit('longpress_insert_start', event, $(this).attr('id'));
         }, press_time_insert));
       })
       .on('touchend', function (event) {
@@ -403,15 +401,44 @@ $(function()
     $('.touch-only')
         .css('display','none');
 
-    $('[id^="insert-entity-"]')
-      .click(function(event) {
-        var path = $(this).attr('id');
-        path = path.substring(14); // after 'insert-entity-'
-        globalEmitter.emit('spawn_entity_start', path);
-      })
-      .on('mousedown', function(event) {
-        event.preventDefault();
+    // 状态锁（放在合适的作用域）
+    var insertLock = false;
+    var insertTimeout = null;
+
+    // 事件绑定
+    $('[id^="insert-entity-"]').on('mousedown', function(event) {
+      // 阻止默认行为和冒泡
+      event.preventDefault();
+      event.stopPropagation();
+      
+      // 检查锁
+      if (insertLock) {
+        console.log('Insert operation in progress, ignoring');
+        return;
+      }
+      
+      // 加锁
+      insertLock = true;
+      
+      // 获取路径
+      var path = $(this).attr('id').substring(14);
+      
+      // 直接调用spawnModel.start，不再发送事件
+      that.scene.spawnModel.start(path, function(obj) {
+        that.emitter.emit('entityCreated', obj, path);
       });
+      
+      // 100ms后解锁
+      if (insertTimeout) {
+        clearTimeout(insertTimeout);
+      }
+      insertTimeout = setTimeout(function() {
+        insertLock = false;
+      }, 100);
+    });
+
+    // 移除所有其他事件绑定
+    $('[id^="insert-entity-"]').off('click');
 
     $('#play-header-fieldset')
         .css('position', 'absolute')
@@ -1081,24 +1108,13 @@ GZ3D.Gui = function(scene)
   );
 
   // Create temp model
-  this.emitter.on('spawn_entity_start', function(entity)
-      {
-        // manually trigger view mode
-        that.scene.setManipulationMode('view');
-        $('#view-mode').prop('checked', true);
-        $('input[type="radio"]').checkboxradio('refresh');
-
-        var name = getNameFromPath(entity);
-
-        that.spawnState = 'START';
-        that.scene.spawnModel.start(entity,function(obj)
-            {
-              that.emitter.emit('entityCreated', obj, entity);
-            });
-        that.emitter.emit('notification_popup',
-            'Place '+name+' at the desired position');
-      }
-  );
+  this.emitter.on('spawn_entity_start', function(entity) {
+    if (!that.scene.spawnModel.active) {
+      that.scene.spawnModel.start(entity, function(obj) {
+        that.emitter.emit('entityCreated', obj, entity);
+      });
+    }
+  });
 
   // Move temp model by touch
   this.emitter.on('spawn_entity_move', function(event)
