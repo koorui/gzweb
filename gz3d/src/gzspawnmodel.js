@@ -332,19 +332,18 @@ GZ3D.SpawnModel.prototype.moveSpawnedModel = function(positionX, positionY)
  */
 GZ3D.SpawnModel.prototype.generateUniqueName = function(entity)
 {
-  // 添加时间戳确保唯一性
-  var timestamp = Date.now();
   var i = 0;
   while (i < 1000)
   {
-    var name = entity + '_' + timestamp + '_' + i;
-    if (!this.scene.getByName(name))
+    if (this.scene.getByName(entity+'_'+i))
     {
-      return name;
+      ++i;
     }
-    ++i;
+    else
+    {
+      return entity+'_'+i;
+    }
   }
-  return entity + '_' + timestamp + '_' + Math.floor(Math.random() * 1000);
 };
 
 /**
@@ -373,7 +372,7 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
   function setUniqueName(obj, prefix) {
     obj.name = prefix + '_' + Date.now() + '_' + Math.floor(Math.random()*10000);
     obj.children.forEach(function(child, idx) {
-      setUniqueName(child, prefix + '_child' + idx);
+      setUniqueName(child, obj.name + '_child' + idx);
     });
   }
   setUniqueName(this.obj, 'imported');
@@ -386,6 +385,8 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
   this.obj.position.x = intersect.x;
   this.obj.position.y = intersect.y;
   this.obj.position.z += 0.5;
+
+  console.log('spawnFromSDF called, new object:', this.obj);
 
   this.scene.add(this.obj);
 

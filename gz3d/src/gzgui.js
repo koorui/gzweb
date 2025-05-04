@@ -1010,6 +1010,9 @@ gzangular.controller('importControl', ['$scope', function($scope) {
       $scope.importStatus = '文件选择失败';
       $scope.$apply();
     }
+
+    // 这里加一行，重置input
+    event.target.value = '';
   };
 }]);
 
