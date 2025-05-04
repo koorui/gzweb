@@ -2989,3 +2989,227 @@ GZ3D.Scene.prototype.createFromSdf = function(sdf)
 
   return obj;
 };
+
+// gz3d/src/gzscene.js 末尾添加
+
+GZ3D.Scene.prototype.exportSDF = function() {
+  let sdf = [];
+  sdf.push('<?xml version="1.0" ?>');
+  sdf.push('<sdf version="1.6">');
+  sdf.push('  <world name="default">');
+
+  // 遍历three.js场景中的所有对象
+  (this.scene.children || []).forEach(function(obj) {
+    // 导出模型
+    if (obj.type === 'Object3D' && obj.children.length > 0 && !(obj.children[0] instanceof THREE.Light)) {
+      sdf.push(exportModelSDF(obj, 4));
+    }
+    // 导出灯光
+    if (obj.children.length > 0 && obj.children[0] instanceof THREE.Light) {
+      sdf.push(exportLightSDF(obj, 4));
+    }
+  });
+
+  sdf.push('  </world>');
+  sdf.push('</sdf>');
+  return sdf.join('\n');
+};
+
+// ====== 以下为辅助函数 ======
+
+function exportModelSDF(obj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  let pos = obj.position;
+  let rot = new THREE.Euler().setFromQuaternion(obj.quaternion);
+  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
+  let lines = [];
+  lines.push(`${pad}<model name="${obj.name}">`);
+  lines.push(`${pad}  <pose>${pose}</pose>`);
+
+  // 导出link
+  let hasLink = false;
+  obj.children.forEach(function(child) {
+    if (child.type === 'Object3D' && !isVisualOrCollision(child)) {
+      lines.push(exportLinkSDF(child, indent + 2));
+      hasLink = true;
+    }
+  });
+
+  // 如果没有link，自动补一个标准link结构
+  if (!hasLink) {
+    let geometryStr = exportAutoGeometrySDF(obj, indent + 6);
+    lines.push(`${pad}  <link name="${obj.name}_link">`);
+    lines.push(`${pad}    <pose>0 0 0 0 0 0</pose>`);
+    lines.push(`${pad}    <visual name="visual">`);
+    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
+    lines.push(`${pad}      <geometry>`);
+    lines.push(geometryStr);
+    lines.push(`${pad}      </geometry>`);
+    lines.push(`${pad}    </visual>`);
+    lines.push(`${pad}    <collision name="collision">`);
+    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
+    lines.push(`${pad}      <geometry>`);
+    lines.push(geometryStr);
+    lines.push(`${pad}      </geometry>`);
+    lines.push(`${pad}    </collision>`);
+    lines.push(`${pad}  </link>`);
+  }
+
+  lines.push(`${pad}</model>`);
+  return lines.join('\n');
+}
+
+function exportLinkSDF(linkObj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  let pos = linkObj.position;
+  let rot = new THREE.Euler().setFromQuaternion(linkObj.quaternion);
+  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
+  let lines = [];
+  lines.push(`${pad}<link name="${linkObj.name}">`);
+  lines.push(`${pad}  <pose>${pose}</pose>`);
+
+  // visual
+  let hasVisual = false;
+  linkObj.children.forEach(function(child) {
+    if (isVisual(child)) {
+      lines.push(exportVisualSDF(child, indent + 4));
+      hasVisual = true;
+    }
+  });
+  // 没有visual时补一个
+  if (!hasVisual) {
+    let geometryStr = exportAutoGeometrySDF(linkObj, indent + 8);
+    lines.push(`${pad}    <visual name="visual">`);
+    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
+    lines.push(`${pad}      <geometry>`);
+    lines.push(geometryStr);
+    lines.push(`${pad}      </geometry>`);
+    lines.push(`${pad}    </visual>`);
+  }
+
+  // collision
+  let hasCollision = false;
+  linkObj.children.forEach(function(child) {
+    if (isCollision(child)) {
+      lines.push(exportCollisionSDF(child, indent + 4));
+      hasCollision = true;
+    }
+  });
+  // 没有collision时补一个
+  if (!hasCollision) {
+    let geometryStr = exportAutoGeometrySDF(linkObj, indent + 8);
+    lines.push(`${pad}    <collision name="collision">`);
+    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
+    lines.push(`${pad}      <geometry>`);
+    lines.push(geometryStr);
+    lines.push(`${pad}      </geometry>`);
+    lines.push(`${pad}    </collision>`);
+  }
+
+  lines.push(`${pad}</link>`);
+  return lines.join('\n');
+}
+
+// 辅助函数：导出visual
+function exportVisualSDF(visualObj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  let pos = visualObj.position;
+  let rot = new THREE.Euler().setFromQuaternion(visualObj.quaternion);
+  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
+  let lines = [];
+  lines.push(`${pad}<visual name="${visualObj.name}">`);
+  lines.push(`${pad}  <pose>${pose}</pose>`);
+  lines.push(`${pad}  <geometry>`);
+  lines.push(exportAutoGeometrySDF(visualObj, indent + 4));
+  lines.push(`${pad}  </geometry>`);
+  // 新增 material
+  lines.push(`${pad}  <material>`);
+  lines.push(`${pad}    <script>`);
+  lines.push(`${pad}      <uri>file://media/materials/scripts/gazebo.material</uri>`);
+  lines.push(`${pad}      <name>Gazebo/Grey</name>`);
+  lines.push(`${pad}    </script>`);
+  lines.push(`${pad}    <ambient>0.1 0.1 0.1 1</ambient>`);
+  lines.push(`${pad}    <diffuse>0.7 0.7 0.7 1</diffuse>`);
+  lines.push(`${pad}    <specular>0.01 0.01 0.01 1</specular>`);
+  lines.push(`${pad}    <emissive>0 0 0 1</emissive>`);
+  lines.push(`${pad}    <opacity>1</opacity>`);
+  lines.push(`${pad}  </material>`);
+  lines.push(`${pad}</visual>`);
+  return lines.join('\n');
+}
+
+// 辅助函数：导出collision
+function exportCollisionSDF(collisionObj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  let pos = collisionObj.position;
+  let rot = new THREE.Euler().setFromQuaternion(collisionObj.quaternion);
+  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
+  let lines = [];
+  lines.push(`${pad}<collision name="${collisionObj.name}">`);
+  lines.push(`${pad}  <pose>${pose}</pose>`);
+  lines.push(`${pad}  <geometry>`);
+  lines.push(exportAutoGeometrySDF(collisionObj, indent + 4));
+  lines.push(`${pad}  </geometry>`);
+  lines.push(`${pad}</collision>`);
+  return lines.join('\n');
+}
+
+// 自动推断geometry类型
+function exportAutoGeometrySDF(obj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  let mesh = obj.children && obj.children.find(child => child instanceof THREE.Mesh);
+  if (!mesh) return `${pad}<!-- 未知几何体 -->`;
+
+  let geometry = mesh.geometry;
+  if (geometry instanceof THREE.BoxGeometry) {
+    let size = geometry.parameters;
+    return `${pad}<box><size>${size.width} ${size.height} ${size.depth}</size></box>`;
+  }
+  if (geometry instanceof THREE.SphereGeometry) {
+    let size = geometry.parameters;
+    return `${pad}<sphere><radius>${size.radius}</radius></sphere>`;
+  }
+  if (geometry instanceof THREE.CylinderGeometry) {
+    let size = geometry.parameters;
+    return `${pad}<cylinder><radius>${size.radiusTop}</radius><length>${size.height}</length></cylinder>`;
+  }
+  return `${pad}<!-- 其它几何体类型暂未导出 -->`;
+}
+
+function exportLightSDF(obj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  let light = obj.children[0];
+  let pos = obj.position;
+  let rot = new THREE.Euler().setFromQuaternion(obj.quaternion);
+  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
+  let type = 'point';
+  if (light instanceof THREE.SpotLight) type = 'spot';
+  if (light instanceof THREE.DirectionalLight) type = 'directional';
+  let lines = [];
+  lines.push(`${pad}<light name="${obj.name}" type="${type}">`);
+  lines.push(`${pad}  <cast_shadows>1</cast_shadows>`);
+  lines.push(`${pad}  <pose>${pose}</pose>`);
+  lines.push(`${pad}  <diffuse>0.8 0.8 0.8 1</diffuse>`);
+  lines.push(`${pad}  <specular>0.2 0.2 0.2 1</specular>`);
+  lines.push(`${pad}  <attenuation>`);
+  lines.push(`${pad}    <range>1000</range>`);
+  lines.push(`${pad}    <constant>0.9</constant>`);
+  lines.push(`${pad}    <linear>0.01</linear>`);
+  lines.push(`${pad}    <quadratic>0.001</quadratic>`);
+  lines.push(`${pad}  </attenuation>`);
+  lines.push(`${pad}  <direction>-0.5 0.1 -0.9</direction>`);
+  lines.push(`${pad}  <cast_shadows>1</cast_shadows>`);
+  lines.push(`${pad}</light>`);
+  return lines.join('\n');
+}
+
+// 工具函数：判断是否visual/collision
+function isVisual(obj) {
+  return obj.name && obj.name.toLowerCase().indexOf('visual') >= 0;
+}
+function isCollision(obj) {
+  return obj.name && obj.name.toLowerCase().indexOf('collision') >= 0;
+}
+function isVisualOrCollision(obj) {
+  return isVisual(obj) || isCollision(obj);
+}
