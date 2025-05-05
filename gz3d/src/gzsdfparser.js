@@ -308,7 +308,19 @@ GZ3D.SdfParser.prototype.parseScale = function(scaleStr)
  */
 GZ3D.SdfParser.prototype.parseBool = function(boolStr)
 {
-  return JSON.parse(boolStr);
+  // 如果是数组，取第一个元素
+  if (Array.isArray(boolStr)) {
+    boolStr = boolStr[0];
+  }
+  // 兼容 "1"/"0"/"true"/"false"
+  if (boolStr === "1" || boolStr === 1 || boolStr === true || boolStr === "true") return true;
+  if (boolStr === "0" || boolStr === 0 || boolStr === false || boolStr === "false") return false;
+  // fallback
+  try {
+    return JSON.parse(boolStr);
+  } catch (e) {
+    return !!boolStr;
+  }
 };
 
 /**
@@ -830,8 +842,17 @@ GZ3D.SdfParser.prototype.spawnFromSDF = function(sdf)
   // Convert SDF XML to Json string and parse JSON string to object
   // TODO: we need better xml 2 json object convertor
   var sdfJson = xml2json(sdfXML, '\t');
-  var sdfObj = JSON.parse(sdfJson).sdf;
-  // it is easier to manipulate json object
+  console.log('xml2json result:', sdfJson);
+
+  var sdfObj;
+  if (typeof sdfJson === 'string') {
+    sdfObj = JSON.parse(sdfJson).sdf;
+  } else if (typeof sdfJson === 'object') {
+    sdfObj = sdfJson.sdf;
+  } else {
+    console.error('未知的xml2json返回类型:', typeof sdfJson, sdfJson);
+    return;
+  }
 
   if (!sdfObj) {
     console.error('Failed to parse SDF: ', sdfJson);

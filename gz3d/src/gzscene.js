@@ -3158,7 +3158,20 @@ function exportCollisionSDF(collisionObj, indent = 0) {
 function exportAutoGeometrySDF(obj, indent = 0) {
   let pad = ' '.repeat(indent);
   let mesh = obj.children && obj.children.find(child => child instanceof THREE.Mesh);
-  if (!mesh) return `${pad}<!-- 未知几何体 -->`;
+  if (!mesh) {
+    // 尝试根据模型名导出 mesh
+    if (obj.name && isModelInList(obj.name)) {
+      // 默认 scale 和 obj 文件名
+      let modelName = obj.name;
+      let meshFile = modelName + '.obj';
+      let scale = '0.0254 0.0254 0.0254'; // 你可以根据实际情况调整
+      return `${pad}<mesh>
+${pad}  <scale>${scale}</scale>
+${pad}  <uri>model://${modelName}/meshes/${meshFile}</uri>
+${pad}</mesh>`;
+    }
+    return `${pad}<!-- 未知几何体 -->`;
+  }
 
   let geometry = mesh.geometry;
   if (geometry instanceof THREE.BoxGeometry) {
@@ -3173,7 +3186,17 @@ function exportAutoGeometrySDF(obj, indent = 0) {
     let size = geometry.parameters;
     return `${pad}<cylinder><radius>${size.radiusTop}</radius><length>${size.height}</length></cylinder>`;
   }
-  return `${pad}<!-- 其它几何体类型暂未导出 -->`;
+  // 其它类型
+  if (obj.name && isModelInList(obj.name)) {
+    let modelName = obj.name;
+    let meshFile = modelName + '.obj';
+    let scale = '0.0254 0.0254 0.0254';
+    return `${pad}<mesh>
+${pad}  <scale>${scale}</scale>
+${pad}  <uri>model://${modelName}/meshes/${meshFile}</uri>
+${pad}</mesh>`;
+  }
+  return `${pad}<!-- 未知几何体 -->`;
 }
 
 function exportLightSDF(obj, indent = 0) {
@@ -3212,4 +3235,18 @@ function isCollision(obj) {
 }
 function isVisualOrCollision(obj) {
   return isVisual(obj) || isCollision(obj);
+}
+
+function isModelInList(name) {
+  if (typeof window.modelList === 'undefined') return false;
+  // 允许 name 带下划线编号（如 ambulance_0），只取前缀
+  let baseName = name.split('_')[0];
+  for (let i = 0; i < window.modelList.length; ++i) {
+    for (let j = 0; j < window.modelList[i].models.length; ++j) {
+      if (window.modelList[i].models[j].modelPath === baseName) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
