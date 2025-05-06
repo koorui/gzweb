@@ -57,11 +57,17 @@ app.use(express.static(path.resolve(staticBasePath)));
 app.post('/api/save-sdf', (req, res) => {
   try {
     const sdfContent = req.body.sdf;
+    let fileName = req.body.fileName || '';
     if (!sdfContent) {
       return res.status(400).json({ success: false, message: '没有收到SDF内容' });
     }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = path.join(__dirname, '../saved_models', `scene_${timestamp}.sdf`);
+    if (!fileName || typeof fileName !== 'string') {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fileName = `scene_${timestamp}.sdf`;
+    }
+    // 防止路径穿越
+    fileName = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const filename = path.join(__dirname, '../saved_models', fileName);
     const dir = path.dirname(filename);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

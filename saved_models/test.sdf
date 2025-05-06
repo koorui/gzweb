@@ -1,0 +1,138 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="default">
+    <light name="sun" type="directional">
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+      <cast_shadows>1</cast_shadows>
+    </light>
+    <model name="box_0">
+      <pose>-1.121 2.662 0.5 0 0 0</pose>
+      <link name="box_0_link">
+        <pose>0 0 0 0 0 0</pose>
+          <visual name="visual">
+            <pose>0 0 0 0 0 0</pose>
+            <geometry>
+              <box><size>1 1 1</size></box>
+            </geometry>
+            <material>
+              <script>
+                <uri>file://media/materials/scripts/gazebo.material</uri>
+                <name>Gazebo/Grey</name>
+              </script>
+              <ambient>0.1 0.1 0.1 1</ambient>
+              <diffuse>0.7 0.7 0.7 1</diffuse>
+              <specular>0.01 0.01 0.01 1</specular>
+              <emissive>0 0 0 1</emissive>
+              <opacity>1</opacity>
+            </material>
+          </visual>
+          <collision name="collision">
+            <pose>0 0 0 0 0 0</pose>
+            <geometry>
+              <box><size>1 1 1</size></box>
+            </geometry>
+          </collision>
+      </link>
+    </model>
+    <model name="sphere_0">
+      <pose>-0.944 1.528 0.5 0 0 0</pose>
+      <link name="sphere_0_link">
+        <pose>0 0 0 0 0 0</pose>
+          <visual name="visual">
+            <pose>0 0 0 0 0 0</pose>
+            <geometry>
+              <sphere><radius>0.5</radius></sphere>
+            </geometry>
+            <material>
+              <script>
+                <uri>file://media/materials/scripts/gazebo.material</uri>
+                <name>Gazebo/Grey</name>
+              </script>
+              <ambient>0.1 0.1 0.1 1</ambient>
+              <diffuse>0.7 0.7 0.7 1</diffuse>
+              <specular>0.01 0.01 0.01 1</specular>
+              <emissive>0 0 0 1</emissive>
+              <opacity>1</opacity>
+            </material>
+          </visual>
+          <collision name="collision">
+            <pose>0 0 0 0 0 0</pose>
+            <geometry>
+              <sphere><radius>0.5</radius></sphere>
+            </geometry>
+          </collision>
+      </link>
+    </model>
+    <model name="cylinder_0">
+      <pose>-0.969 0.954 0.5 0 0 0</pose>
+      <link name="cylinder_0_link">
+        <pose>0 0 0 0 0 0</pose>
+          <visual name="visual">
+            <pose>0 0 0 0 0 0</pose>
+            <geometry>
+              <cylinder><radius>0.5</radius><length>1</length></cylinder>
+            </geometry>
+            <material>
+              <script>
+                <uri>file://media/materials/scripts/gazebo.material</uri>
+                <name>Gazebo/Grey</name>
+              </script>
+              <ambient>0.1 0.1 0.1 1</ambient>
+              <diffuse>0.7 0.7 0.7 1</diffuse>
+              <specular>0.01 0.01 0.01 1</specular>
+              <emissive>0 0 0 1</emissive>
+              <opacity>1</opacity>
+            </material>
+          </visual>
+          <collision name="collision">
+            <pose>0 0 0 0 0 0</pose>
+            <geometry>
+              <cylinder><radius>0.5</radius><length>1</length></cylinder>
+            </geometry>
+          </collision>
+      </link>
+    </model>
+    <light name="sun" type="directional">
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+      <cast_shadows>1</cast_shadows>
+    </light>
+    <model name="cylinder_1">
+      <pose>-2.9176752457416963 2.0701300005177528 0.5 0 0 0</pose>
+      <link name="cylinder_1_link">
+        <pose>0 0 0 0 0 0</pose>
+        <visual name="visual">
+          <pose>0 0 0 0 0 0</pose>
+          <geometry>
+          <cylinder><radius>0.5</radius><length>1</length></cylinder>
+          </geometry>
+        </visual>
+        <collision name="collision">
+          <pose>0 0 0 0 0 0</pose>
+          <geometry>
+          <cylinder><radius>0.5</radius><length>1</length></cylinder>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+  </world>
+</sdf>

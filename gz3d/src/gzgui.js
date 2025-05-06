@@ -960,17 +960,22 @@ gzangular.controller('importControl', ['$scope', function($scope) {
               // 世界类型，直接导入
               var obj = sdfparser.spawnFromSDF(sdfContent);
               if (obj) {
+                // 清空场景
                 if (typeof gui.scene.initScene === 'function') {
                   gui.scene.initScene();
                 } else if (typeof gui.scene.clear === 'function') {
                   gui.scene.clear();
                 } else {
-                  // 简单粗暴地移除所有子对象
                   while (gui.scene.children.length > 0) {
                     gui.scene.remove(gui.scene.children[0]);
                   }
                 }
-                gui.scene.add(obj);
+                // 复制一份 children 数组，避免遍历时被修改
+                var childrenCopy = obj.children.slice();
+                childrenCopy.forEach(function(child) {
+                  gui.scene.add(child);
+                  registerAllModels(child);
+                });
                 $scope.importStatus = '世界导入成功';
               } else {
                 $scope.importStatus = 'SDF解析失败，未生成对象';
@@ -1021,7 +1026,7 @@ gzangular.controller('exportControl', ['$scope', function($scope) {
   $scope.openExportPanel = function() {
     globalEmitter.emit('openTab', 'exportMenu', 'exportMenu');
   };
-  
+  $scope.exportFileName = 'scene.sdf'; // 默认文件名
   // 初始化必要的变量
   $scope.exportStatus = '';
   
@@ -1039,12 +1044,19 @@ gzangular.controller('exportControl', ['$scope', function($scope) {
         return;
       }
 
+      // 获取用户输入的文件名，默认 scene.sdf
+      let fileName = $scope.exportFileName && $scope.exportFileName.trim() ? $scope.exportFileName.trim() : 'scene.sdf';
+      // 自动补全 .sdf 后缀
+      if (!fileName.toLowerCase().endsWith('.sdf')) {
+        fileName += '.sdf';
+      }
+
       // 创建并下载文件
       const blob = new Blob([sdfContent], {type: 'text/plain'});
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'scene.sdf';
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1069,13 +1081,16 @@ gzangular.controller('exportControl', ['$scope', function($scope) {
         $scope.exportStatus = '导出失败：场景为空';
         return;
       }
-      // 发送到服务器
+      let fileName = $scope.exportFileName && $scope.exportFileName.trim() ? $scope.exportFileName.trim() : 'scene.sdf';
+      if (!fileName.toLowerCase().endsWith('.sdf')) {
+        fileName += '.sdf';
+      }
       fetch('/api/save-sdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ sdf: sdfContent })
+        body: JSON.stringify({ sdf: sdfContent, fileName: fileName })
       })
       .then(response => response.json())
       .then(data => {
@@ -2779,3 +2794,17 @@ GZ3D.Gui.prototype.saveToServer = function(sdfContent) {
     $('#exportStatus').text('服务器连接失败!').css('color', 'red');
   });
 };
+
+function registerAllModels(obj) {
+  obj.traverse(function(child) {
+    if (child.type === 'Object3D' && child.name && child.name !== 'world' && child.children.length > 0) {
+      gui.setModelStats({
+        name: child.name,
+        pose: {
+          position: child.position,
+          orientation: child.quaternion
+        }
+      }, 'update');
+    }
+  });
+}
