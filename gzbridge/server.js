@@ -48,44 +48,43 @@ let materialScriptsMessage = {};
  */
 let isConnected = false;
 
-/**
- * Callback to serve static files
- * @param req Request
- * @param res Response
- */
-let staticServe = function(req, res) {
+const app = express();
 
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Request-Method', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET');
-  res.setHeader('Access-Control-Allow-Headers', '*');
+app.use(express.json());
+app.use(express.static(path.resolve(staticBasePath)));
 
-  let fileLoc = path.resolve(staticBasePath);
-
-  if (req.url === '/')
-    req.url = '/index.html';
-
-  fileLoc = path.join(fileLoc, req.url);
-
-  fs.readFile(fileLoc, function(err, data) {
-    if (err) {
-        res.writeHead(404, 'Not Found');
-        res.write('404: File Not Found!');
-        return res.end();
+// API 路由
+app.post('/api/save-sdf', (req, res) => {
+  try {
+    const sdfContent = req.body.sdf;
+    if (!sdfContent) {
+      return res.status(400).json({ success: false, message: '没有收到SDF内容' });
     }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = path.join(__dirname, '../saved_models', `scene_${timestamp}.sdf`);
+    const dir = path.dirname(filename);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filename, sdfContent, 'utf8');
+    res.json({
+      success: true,
+      message: '场景已保存',
+      filename: filename
+    });
+  } catch (error) {
+    console.error('保存场景错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '服务器错误',
+      error: error.message
+    });
+  }
+});
 
-    res.statusCode = 200;
-
-    res.write(data);
-    return res.end();
-  });
-};
-
-// HTTP server
-let httpServer = http.createServer(staticServe);
+// 创建 httpServer 并挂载 express
+const httpServer = http.createServer(app);
 httpServer.listen(port);
-
 console.log(new Date() + " Static server listening on port: " + port);
 
 // Websocket
@@ -205,42 +204,3 @@ if (gzNode.getIsGzServerConnected())
     }
   }
 }
-
-// 添加保存SDF的路由
-const app = express();
-
-app.post('/api/save-sdf', (req, res) => {
-  try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = path.join(__dirname, '../saved_models', `scene_${timestamp}.sdf`);
-    
-    // 确保保存目录存在
-    const dir = path.dirname(filename);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
-    // 调用C++层的保存函数
-    const success = gznode.saveScene(filename);
-    
-    if (success) {
-      res.json({
-        success: true,
-        message: '场景已保存',
-        filename: filename
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: '保存场景失败'
-      });
-    }
-  } catch (error) {
-    console.error('保存场景错误:', error);
-    res.status(500).json({
-      success: false,
-      message: '服务器错误',
-      error: error.message
-    });
-  }
-});

@@ -3068,16 +3068,14 @@ function exportLinkSDF(linkObj, indent = 0) {
   lines.push(`${pad}<link name="${linkObj.name}">`);
   lines.push(`${pad}  <pose>${pose}</pose>`);
 
-  // visual
-  let hasVisual = false;
-  linkObj.children.forEach(function(child) {
-    if (isVisual(child)) {
+  // 导出所有 visual
+  let visuals = linkObj.children.filter(isVisual);
+  if (visuals.length > 0) {
+    visuals.forEach(function(child) {
       lines.push(exportVisualSDF(child, indent + 4));
-      hasVisual = true;
-    }
-  });
-  // 没有visual时补一个
-  if (!hasVisual) {
+    });
+  } else {
+    // 没有 visual 时补一个
     let geometryStr = exportAutoGeometrySDF(linkObj, indent + 8);
     lines.push(`${pad}    <visual name="visual">`);
     lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
@@ -3087,16 +3085,14 @@ function exportLinkSDF(linkObj, indent = 0) {
     lines.push(`${pad}    </visual>`);
   }
 
-  // collision
-  let hasCollision = false;
-  linkObj.children.forEach(function(child) {
-    if (isCollision(child)) {
+  // 导出所有 collision
+  let collisions = linkObj.children.filter(isCollision);
+  if (collisions.length > 0) {
+    collisions.forEach(function(child) {
       lines.push(exportCollisionSDF(child, indent + 4));
-      hasCollision = true;
-    }
-  });
-  // 没有collision时补一个
-  if (!hasCollision) {
+    });
+  } else {
+    // 没有 collision 时补一个
     let geometryStr = exportAutoGeometrySDF(linkObj, indent + 8);
     lines.push(`${pad}    <collision name="collision">`);
     lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
@@ -3157,46 +3153,50 @@ function exportCollisionSDF(collisionObj, indent = 0) {
 // 自动推断geometry类型
 function exportAutoGeometrySDF(obj, indent = 0) {
   let pad = ' '.repeat(indent);
-  let mesh = obj.children && obj.children.find(child => child instanceof THREE.Mesh);
-  if (!mesh) {
-    // 尝试根据模型名导出 mesh
-    if (obj.name && isModelInList(obj.name)) {
-      // 默认 scale 和 obj 文件名
-      let modelName = obj.name;
-      let meshFile = modelName + '.obj';
-      let scale = '0.0254 0.0254 0.0254'; // 你可以根据实际情况调整
-      return `${pad}<mesh>
-${pad}  <scale>${scale}</scale>
-${pad}  <uri>model://${modelName}/meshes/${meshFile}</uri>
-${pad}</mesh>`;
+
+  // 递归查找 mesh
+  let mesh = findMeshRecursive(obj);
+
+  if (mesh) {
+    let geometry = mesh.geometry;
+    if (geometry instanceof THREE.BoxGeometry) {
+      let size = geometry.parameters;
+      return `${pad}<box><size>${size.width} ${size.height} ${size.depth}</size></box>`;
     }
-    return `${pad}<!-- 未知几何体 -->`;
+    if (geometry instanceof THREE.SphereGeometry) {
+      let size = geometry.parameters;
+      return `${pad}<sphere><radius>${size.radius}</radius></sphere>`;
+    }
+    if (geometry instanceof THREE.CylinderGeometry) {
+      let size = geometry.parameters;
+      return `${pad}<cylinder><radius>${size.radiusTop}</radius><length>${size.height}</length></cylinder>`;
+    }
   }
 
-  let geometry = mesh.geometry;
-  if (geometry instanceof THREE.BoxGeometry) {
-    let size = geometry.parameters;
-    return `${pad}<box><size>${size.width} ${size.height} ${size.depth}</size></box>`;
-  }
-  if (geometry instanceof THREE.SphereGeometry) {
-    let size = geometry.parameters;
-    return `${pad}<sphere><radius>${size.radius}</radius></sphere>`;
-  }
-  if (geometry instanceof THREE.CylinderGeometry) {
-    let size = geometry.parameters;
-    return `${pad}<cylinder><radius>${size.radiusTop}</radius><length>${size.height}</length></cylinder>`;
-  }
-  // 其它类型
+  // mesh 型模型
   if (obj.name && isModelInList(obj.name)) {
-    let modelName = obj.name;
-    let meshFile = modelName + '.obj';
+    let modelName = obj.name.split('_')[0];
+    let meshFile = guessMeshFile(modelName);
     let scale = '0.0254 0.0254 0.0254';
     return `${pad}<mesh>
 ${pad}  <scale>${scale}</scale>
 ${pad}  <uri>model://${modelName}/meshes/${meshFile}</uri>
 ${pad}</mesh>`;
   }
+
   return `${pad}<!-- 未知几何体 -->`;
+}
+
+function findMeshRecursive(obj) {
+  if (!obj) return null;
+  if (obj instanceof THREE.Mesh) return obj;
+  if (obj.children && obj.children.length > 0) {
+    for (let i = 0; i < obj.children.length; ++i) {
+      let found = findMeshRecursive(obj.children[i]);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 function exportLightSDF(obj, indent = 0) {
@@ -3249,4 +3249,65 @@ function isModelInList(name) {
     }
   }
   return false;
+}
+
+function guessMeshFile(modelName) {
+  // 约定优先顺序
+  const exts = ['.dae', '.obj', '.stl'];
+  // 由于前端无法直接读取目录，这里只能假定文件存在
+  // 你可以在服务端生成一个映射表，前端通过 window.modelMeshMap 访问
+  if (window.modelMeshMap && window.modelMeshMap[modelName]) {
+    return window.modelMeshMap[modelName];
+  }
+  // 否则默认优先顺序
+  for (let i = 0; i < exts.length; ++i) {
+    // 你可以用 ajax/head 请求去试探文件是否存在（不推荐，效率低）
+    // 这里只返回第一个
+    return modelName + exts[i];
+  }
+  // fallback
+  return modelName + '.obj';
+}
+
+function exportMaterialSDF(visualObj, indent = 0) {
+  let pad = ' '.repeat(indent);
+  // 尝试从 visualObj 的 userData 或 material 属性获取材质信息
+  let material = null;
+  let mesh = findMeshRecursive(visualObj);
+  if (mesh && mesh.material) {
+    material = mesh.material;
+  }
+  // 你可以根据实际情况扩展 userData 里的材质
+  // 默认材质
+  let scriptUri = 'file://media/materials/scripts/gazebo.material';
+  let scriptName = 'Gazebo/Grey';
+  let ambient = '0.1 0.1 0.1 1';
+  let diffuse = '0.7 0.7 0.7 1';
+  let specular = '0.01 0.01 0.01 1';
+  let emissive = '0 0 0 1';
+  let opacity = '1';
+
+  // 优先从 userData 或 mesh.material 里获取材质名
+  if (visualObj.userData && visualObj.userData.materialName) {
+    scriptName = visualObj.userData.materialName;
+  } else if (material && material.name) {
+    scriptName = material.name;
+  }
+
+  // 其它参数同理可自动获取
+  // ...
+
+  let lines = [];
+  lines.push(`${pad}<material>`);
+  lines.push(`${pad}  <script>`);
+  lines.push(`${pad}    <uri>${scriptUri}</uri>`);
+  lines.push(`${pad}    <name>${scriptName}</name>`);
+  lines.push(`${pad}  </script>`);
+  lines.push(`${pad}  <ambient>${ambient}</ambient>`);
+  lines.push(`${pad}  <diffuse>${diffuse}</diffuse>`);
+  lines.push(`${pad}  <specular>${specular}</specular>`);
+  lines.push(`${pad}  <emissive>${emissive}</emissive>`);
+  lines.push(`${pad}  <opacity>${opacity}</opacity>`);
+  lines.push(`${pad}</material>`);
+  return lines.join('\n');
 }

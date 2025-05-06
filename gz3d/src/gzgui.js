@@ -1057,6 +1057,46 @@ gzangular.controller('exportControl', ['$scope', function($scope) {
     }
     $scope.$apply();
   };
+
+  $scope.saveSceneToServer = function() {
+    try {
+      if (typeof gui === 'undefined' || !gui.scene) {
+        $scope.exportStatus = '场景未准备好';
+        return;
+      }
+      const sdfContent = gui.scene.exportSDF();
+      if (!sdfContent) {
+        $scope.exportStatus = '导出失败：场景为空';
+        return;
+      }
+      // 发送到服务器
+      fetch('/api/save-sdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sdf: sdfContent })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          $scope.exportStatus = '已保存到服务器! 文件名: ' + data.filename;
+        } else {
+          $scope.exportStatus = '服务器保存失败: ' + data.message;
+        }
+        $scope.$apply();
+      })
+      .catch(error => {
+        console.error('服务器错误:', error);
+        $scope.exportStatus = '服务器连接失败!';
+        $scope.$apply();
+      });
+    } catch (error) {
+      console.error('保存到服务器错误:', error);
+      $scope.exportStatus = '保存到服务器失败: ' + error.message;
+      $scope.$apply();
+    }
+  };
 }]);
 
 /**
