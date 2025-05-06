@@ -1019,6 +1019,104 @@ gzangular.controller('importControl', ['$scope', function($scope) {
     // 这里加一行，重置input
     event.target.value = '';
   };
+
+  $scope.serverSdfList = [];
+  $scope.serverSdfListVisible = false;
+
+  // 打开服务器SDF文件列表
+  $scope.openServerImportPanel = function() {
+    fetch('/api/list-sdf')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          $scope.serverSdfList = data.files;
+          $scope.serverSdfListVisible = true;
+        } else {
+          $scope.serverSdfList = [];
+          alert('获取服务器文件列表失败');
+        }
+        $scope.$apply();
+      })
+      .catch(err => {
+        $scope.serverSdfList = [];
+        $scope.serverSdfListVisible = false;
+        alert('服务器连接失败');
+        $scope.$apply();
+      });
+  };
+
+  // 从服务器导入指定SDF文件
+  $scope.importSdfFromServer = function(fileName) {
+    fetch('/api/get-sdf?file=' + encodeURIComponent(fileName))
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // 复用本地导入逻辑
+          $scope.serverSdfListVisible = false;
+          $scope.handleSdfContentImport(data.content);
+        } else {
+          alert('读取文件失败: ' + data.message);
+        }
+      })
+      .catch(err => {
+        alert('服务器连接失败');
+      });
+  };
+
+  // 复用本地导入的SDF内容处理逻辑
+  $scope.handleSdfContentImport = function(sdfContent) {
+    try {
+      if (typeof sdfparser !== 'undefined' && sdfparser) {
+        // 下面这段逻辑直接复制你 $scope.handleFileSelect 里 reader.onload 的内容即可
+        let rootTag = '';
+        try {
+          rootTag = sdfContent.match(/<\s*(model|light|world)\b/i)[1].toLowerCase();
+        } catch (err) {
+          rootTag = '';
+        }
+        if (rootTag === 'world') {
+          var obj = sdfparser.spawnFromSDF(sdfContent);
+          if (obj) {
+            if (typeof gui.scene.initScene === 'function') {
+              gui.scene.initScene();
+            } else if (typeof gui.scene.clear === 'function') {
+              gui.scene.clear();
+            } else {
+              while (gui.scene.children.length > 0) {
+                gui.scene.remove(gui.scene.children[0]);
+              }
+            }
+            var childrenCopy = obj.children.slice();
+            childrenCopy.forEach(function(child) {
+              gui.scene.add(child);
+              registerAllModels(child);
+            });
+            $scope.importStatus = '世界导入成功';
+          } else {
+            $scope.importStatus = 'SDF解析失败，未生成对象';
+          }
+        } else if (rootTag === 'model' || rootTag === 'light') {
+          window._importedSDFCache = sdfContent;
+          globalEmitter.emit('imported_sdf_ready', {
+            sdf: sdfContent,
+            type: rootTag
+          });
+          $scope.importStatus = '请在场景中点击放置导入的模型/灯光';
+        } else {
+          var obj = sdfparser.spawnFromSDF(sdfContent);
+          gui.scene.add(obj);
+          $scope.importStatus = '未知类型，已追加到场景';
+        }
+      } else {
+        $scope.importStatus = 'SDF解析器未初始化';
+      }
+      $scope.$apply();
+    } catch (error) {
+      console.error('导入错误:', error);
+      $scope.importStatus = '导入失败: ' + error.message;
+      $scope.$apply();
+    }
+  };
 }]);
 
 // 导出控制器

@@ -989,6 +989,18 @@
               <button class="ui-btn" onclick="document.getElementById('sdfFileInput').click()">
                 选择 SDF 文件
               </button>
+              <button class="ui-btn" ng-click="openServerImportPanel()">
+                从服务器选择 SDF 文件
+              </button>
+              <div ng-show="serverSdfListVisible" style="margin-top:10px;">
+                <div ng-if="serverSdfList.length === 0">服务器上暂无SDF文件</div>
+                <ul>
+                  <li ng-repeat="file in serverSdfList">
+                    <span style="cursor:pointer;color:#337ab7;" ng-click="importSdfFromServer(file)">{{file}}</span>
+                  </li>
+                </ul>
+                <button class="ui-btn" ng-click="serverSdfListVisible=false">关闭</button>
+              </div>
               <div id="importStatus" class="status-message" ng-bind="importStatus"></div>
             </div>
           </div>

@@ -88,6 +88,36 @@ app.post('/api/save-sdf', (req, res) => {
   }
 });
 
+// 获取服务器上所有已保存的 SDF 文件列表
+app.get('/api/list-sdf', (req, res) => {
+  const dir = path.join(__dirname, '../saved_models');
+  fs.readdir(dir, (err, files) => {
+    if (err) {
+      return res.status(500).json({success: false, message: '读取目录失败'});
+    }
+    // 只返回 .sdf 文件
+    const sdfFiles = files.filter(f => f.endsWith('.sdf'));
+    res.json({success: true, files: sdfFiles});
+  });
+});
+
+// 获取指定 SDF 文件内容
+app.get('/api/get-sdf', (req, res) => {
+  const fileName = req.query.file;
+  if (!fileName || typeof fileName !== 'string') {
+    return res.status(400).json({success: false, message: '缺少文件名'});
+  }
+  // 防止路径穿越
+  const safeName = fileName.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  const filePath = path.join(__dirname, '../saved_models', safeName);
+  fs.readFile(filePath, 'utf8', (err, data) => {
+    if (err) {
+      return res.status(404).json({success: false, message: '文件不存在'});
+    }
+    res.json({success: true, content: data});
+  });
+});
+
 // 创建 httpServer 并挂载 express
 const httpServer = http.createServer(app);
 httpServer.listen(port);
