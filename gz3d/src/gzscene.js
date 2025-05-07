@@ -3018,120 +3018,148 @@ GZ3D.Scene.prototype.exportSDF = function() {
 // ====== 以下为辅助函数 ======
 
 function exportModelSDF(obj, indent = 0) {
-  let pad = ' '.repeat(indent);
-  let pos = obj.position;
-  let rot = new THREE.Euler().setFromQuaternion(obj.quaternion);
-  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
-  let lines = [];
-  lines.push(`${pad}<model name="${obj.name}">`);
-  lines.push(`${pad}  <pose>${pose}</pose>`);
-
-  // 导出link
-  let hasLink = false;
-  obj.children.forEach(function(child) {
-    if (child.type === 'Object3D' && !isVisualOrCollision(child)) {
-      lines.push(exportLinkSDF(child, indent + 2));
-      hasLink = true;
-    }
-  });
-
-  // 如果没有link，自动补一个标准link结构
-  if (!hasLink) {
-    let geometryStr = exportAutoGeometrySDF(obj, indent + 6);
-    lines.push(`${pad}  <link name="${obj.name}_link">`);
-    lines.push(`${pad}    <pose>0 0 0 0 0 0</pose>`);
-    lines.push(`${pad}    <visual name="visual">`);
-    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
-    lines.push(`${pad}      <geometry>`);
-    lines.push(geometryStr);
-    lines.push(`${pad}      </geometry>`);
-    lines.push(`${pad}    </visual>`);
-    lines.push(`${pad}    <collision name="collision">`);
-    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
-    lines.push(`${pad}      <geometry>`);
-    lines.push(geometryStr);
-    lines.push(`${pad}      </geometry>`);
-    lines.push(`${pad}    </collision>`);
-    lines.push(`${pad}  </link>`);
-  }
-
-  lines.push(`${pad}</model>`);
-  return lines.join('\n');
+  let sdf = '';
+  const indentStr = ' '.repeat(indent);
+  
+  // 获取模型名称
+  const modelName = obj.name.replace(/_\d+$/, '');
+  
+  sdf += `${indentStr}<model name="${obj.name}">\n`;
+  
+  // 导出位置和姿态
+  const position = obj.position;
+  const quaternion = obj.quaternion;
+  const euler = new THREE.Euler().setFromQuaternion(quaternion);
+  
+  sdf += `${indentStr}  <pose>${position.x} ${position.y} ${position.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
+  
+  // 创建标准link结构
+  sdf += `${indentStr}  <link name="link">\n`;
+  
+  // 添加惯性属性
+  sdf += `${indentStr}    <inertial>\n`;
+  sdf += `${indentStr}      <mass>1.0</mass>\n`;
+  sdf += `${indentStr}      <inertia>\n`;
+  sdf += `${indentStr}        <ixx>1.0</ixx>\n`;
+  sdf += `${indentStr}        <ixy>0.0</ixy>\n`;
+  sdf += `${indentStr}        <ixz>0.0</ixz>\n`;
+  sdf += `${indentStr}        <iyy>1.0</iyy>\n`;
+  sdf += `${indentStr}        <iyz>0.0</iyz>\n`;
+  sdf += `${indentStr}        <izz>1.0</izz>\n`;
+  sdf += `${indentStr}      </inertia>\n`;
+  sdf += `${indentStr}    </inertial>\n`;
+  
+  // 添加视觉元素
+  sdf += `${indentStr}    <visual name="visual">\n`;
+  sdf += exportAutoGeometrySDF(obj, indent + 6);
+  sdf += exportMaterialSDF(obj, indent + 6);
+  sdf += `${indentStr}    </visual>\n`;
+  
+  // 添加碰撞元素
+  sdf += `${indentStr}    <collision name="collision">\n`;
+  sdf += exportAutoGeometrySDF(obj, indent + 6);
+  sdf += `${indentStr}    </collision>\n`;
+  
+  sdf += `${indentStr}  </link>\n`;
+  sdf += `${indentStr}</model>\n`;
+  
+  return sdf;
 }
 
 function exportLinkSDF(linkObj, indent = 0) {
-  let pad = ' '.repeat(indent);
-  let pos = linkObj.position;
-  let rot = new THREE.Euler().setFromQuaternion(linkObj.quaternion);
-  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
-  let lines = [];
-  lines.push(`${pad}<link name="${linkObj.name}">`);
-  lines.push(`${pad}  <pose>${pose}</pose>`);
-
-  // 导出所有 visual
-  let visuals = linkObj.children.filter(isVisual);
-  if (visuals.length > 0) {
-    visuals.forEach(function(child) {
-      lines.push(exportVisualSDF(child, indent + 4));
-    });
-  } else {
-    // 没有 visual 时补一个
-    let geometryStr = exportAutoGeometrySDF(linkObj, indent + 8);
-    lines.push(`${pad}    <visual name="visual">`);
-    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
-    lines.push(`${pad}      <geometry>`);
-    lines.push(geometryStr);
-    lines.push(`${pad}      </geometry>`);
-    lines.push(`${pad}    </visual>`);
+  let sdf = '';
+  const indentStr = ' '.repeat(indent);
+  
+  sdf += `${indentStr}<link name="${linkObj.name || 'link'}">\n`;
+  
+  // 导出位姿
+  if (linkObj.position || linkObj.quaternion) {
+    const pos = linkObj.position || new THREE.Vector3();
+    const quat = linkObj.quaternion || new THREE.Quaternion();
+    const euler = new THREE.Euler().setFromQuaternion(quat);
+    
+    sdf += `${indentStr}  <pose>${pos.x} ${pos.y} ${pos.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
   }
-
-  // 导出所有 collision
-  let collisions = linkObj.children.filter(isCollision);
-  if (collisions.length > 0) {
-    collisions.forEach(function(child) {
-      lines.push(exportCollisionSDF(child, indent + 4));
-    });
-  } else {
-    // 没有 collision 时补一个
-    let geometryStr = exportAutoGeometrySDF(linkObj, indent + 8);
-    lines.push(`${pad}    <collision name="collision">`);
-    lines.push(`${pad}      <pose>0 0 0 0 0 0</pose>`);
-    lines.push(`${pad}      <geometry>`);
-    lines.push(geometryStr);
-    lines.push(`${pad}      </geometry>`);
-    lines.push(`${pad}    </collision>`);
+  
+  // 导出惯性
+  if (linkObj.userData && linkObj.userData.inertial) {
+    const inertial = linkObj.userData.inertial;
+    sdf += `${indentStr}  <inertial>\n`;
+    if (inertial.mass) {
+      sdf += `${indentStr}    <mass>${inertial.mass}</mass>\n`;
+    }
+    if (inertial.inertia) {
+      sdf += `${indentStr}    <inertia>\n`;
+      sdf += `${indentStr}      <ixx>${inertial.inertia.ixx}</ixx>\n`;
+      sdf += `${indentStr}      <ixy>${inertial.inertia.ixy}</ixy>\n`;
+      sdf += `${indentStr}      <ixz>${inertial.inertia.ixz}</ixz>\n`;
+      sdf += `${indentStr}      <iyy>${inertial.inertia.iyy}</iyy>\n`;
+      sdf += `${indentStr}      <iyz>${inertial.inertia.iyz}</iyz>\n`;
+      sdf += `${indentStr}      <izz>${inertial.inertia.izz}</izz>\n`;
+      sdf += `${indentStr}    </inertia>\n`;
+    }
+    sdf += `${indentStr}  </inertial>\n`;
   }
-
-  lines.push(`${pad}</link>`);
-  return lines.join('\n');
+  
+  // 导出视觉元素
+  linkObj.children.forEach(child => {
+    if (isVisual(child)) {
+      sdf += exportVisualSDF(child, indent + 2);
+    }
+  });
+  
+  // 导出碰撞元素
+  linkObj.children.forEach(child => {
+    if (isCollision(child)) {
+      sdf += exportCollisionSDF(child, indent + 2);
+    }
+  });
+  
+  sdf += `${indentStr}</link>\n`;
+  
+  return sdf;
 }
 
 // 辅助函数：导出visual
 function exportVisualSDF(visualObj, indent = 0) {
-  let pad = ' '.repeat(indent);
-  let pos = visualObj.position;
-  let rot = new THREE.Euler().setFromQuaternion(visualObj.quaternion);
-  let pose = `${pos.x} ${pos.y} ${pos.z} ${rot.x} ${rot.y} ${rot.z}`;
-  let lines = [];
-  lines.push(`${pad}<visual name="${visualObj.name}">`);
-  lines.push(`${pad}  <pose>${pose}</pose>`);
-  lines.push(`${pad}  <geometry>`);
-  lines.push(exportAutoGeometrySDF(visualObj, indent + 4));
-  lines.push(`${pad}  </geometry>`);
-  // 新增 material
-  lines.push(`${pad}  <material>`);
-  lines.push(`${pad}    <script>`);
-  lines.push(`${pad}      <uri>file://media/materials/scripts/gazebo.material</uri>`);
-  lines.push(`${pad}      <name>Gazebo/Grey</name>`);
-  lines.push(`${pad}    </script>`);
-  lines.push(`${pad}    <ambient>0.1 0.1 0.1 1</ambient>`);
-  lines.push(`${pad}    <diffuse>0.7 0.7 0.7 1</diffuse>`);
-  lines.push(`${pad}    <specular>0.01 0.01 0.01 1</specular>`);
-  lines.push(`${pad}    <emissive>0 0 0 1</emissive>`);
-  lines.push(`${pad}    <opacity>1</opacity>`);
-  lines.push(`${pad}  </material>`);
-  lines.push(`${pad}</visual>`);
-  return lines.join('\n');
+  let sdf = '';
+  const indentStr = ' '.repeat(indent);
+  
+  sdf += `${indentStr}<visual name="${visualObj.name || 'visual'}">\n`;
+  
+  // 导出位姿
+  if (visualObj.position || visualObj.quaternion) {
+    const pos = visualObj.position || new THREE.Vector3();
+    const quat = visualObj.quaternion || new THREE.Quaternion();
+    const euler = new THREE.Euler().setFromQuaternion(quat);
+    
+    sdf += `${indentStr}  <pose>${pos.x} ${pos.y} ${pos.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
+  }
+  
+  // 导出几何体
+  sdf += `${indentStr}  <geometry>\n`;
+  sdf += exportAutoGeometrySDF(visualObj, indent + 4);
+  sdf += `${indentStr}  </geometry>\n`;
+  
+  // 导出材质
+  sdf += exportMaterialSDF(visualObj, indent + 2);
+  
+  // 导出透明度
+  if (visualObj.transparent) {
+    sdf += `${indentStr}  <transparency>${1.0 - visualObj.opacity}</transparency>\n`;
+  }
+  
+  // 导出阴影设置
+  if (visualObj.castShadow !== undefined) {
+    sdf += `${indentStr}  <cast_shadows>${visualObj.castShadow}</cast_shadows>\n`;
+  }
+  if (visualObj.receiveShadow !== undefined) {
+    sdf += `${indentStr}  <receive_shadows>${visualObj.receiveShadow}</receive_shadows>\n`;
+  }
+  
+  sdf += `${indentStr}</visual>\n`;
+  
+  return sdf;
 }
 
 // 辅助函数：导出collision
@@ -3152,48 +3180,69 @@ function exportCollisionSDF(collisionObj, indent = 0) {
 
 // 自动推断geometry类型
 function exportAutoGeometrySDF(obj, indent = 0) {
-  let pad = ' '.repeat(indent);
-
-  // 递归查找 mesh
-  let mesh = findMeshRecursive(obj);
-
-  if (mesh) {
-    let geometry = mesh.geometry;
-    if (geometry instanceof THREE.BoxGeometry) {
-      let size = geometry.parameters;
-      return `${pad}<box><size>${size.width} ${size.height} ${size.depth}</size></box>`;
+  let sdf = '';
+  const indentStr = ' '.repeat(indent);
+  
+  // 获取模型名称（移除数字后缀）
+  const modelName = obj.name.replace(/_\d+$/, '');
+  
+  // 检查是否是基本几何体
+  if (modelName === 'box' || modelName === 'sphere' || modelName === 'cylinder') {
+    // 使用基本几何体标签
+    if (modelName === 'box') {
+      sdf += `${indentStr}    <geometry>\n`;
+      sdf += `${indentStr}      <box>\n`;
+      sdf += `${indentStr}        <size>1 1 1</size>\n`;
+      sdf += `${indentStr}      </box>\n`;
+      sdf += `${indentStr}    </geometry>\n`;
+    } else if (modelName === 'sphere') {
+      sdf += `${indentStr}    <geometry>\n`;
+      sdf += `${indentStr}      <sphere>\n`;
+      sdf += `${indentStr}        <radius>0.5</radius>\n`;
+      sdf += `${indentStr}      </sphere>\n`;
+      sdf += `${indentStr}    </geometry>\n`;
+    } else if (modelName === 'cylinder') {
+      sdf += `${indentStr}    <geometry>\n`;
+      sdf += `${indentStr}      <cylinder>\n`;
+      sdf += `${indentStr}        <radius>0.5</radius>\n`;
+      sdf += `${indentStr}        <length>1</length>\n`;
+      sdf += `${indentStr}      </cylinder>\n`;
+      sdf += `${indentStr}    </geometry>\n`;
     }
-    if (geometry instanceof THREE.SphereGeometry) {
-      let size = geometry.parameters;
-      return `${pad}<sphere><radius>${size.radius}</radius></sphere>`;
-    }
-    if (geometry instanceof THREE.CylinderGeometry) {
-      let size = geometry.parameters;
-      return `${pad}<cylinder><radius>${size.radiusTop}</radius><length>${size.height}</length></cylinder>`;
+  } else {
+    // 处理网格模型
+    const mesh = findMeshRecursive(obj);
+    if (mesh) {
+      sdf += `${indentStr}    <geometry>\n`;
+      sdf += `${indentStr}      <mesh>\n`;
+      
+      // 构建网格URI
+      const meshUri = `model://${modelName}/meshes/${modelName}.dae`;
+      sdf += `${indentStr}        <uri>${meshUri}</uri>\n`;
+      
+      // 添加缩放信息
+      if (mesh.scale) {
+        sdf += `${indentStr}        <scale>${mesh.scale.x} ${mesh.scale.y} ${mesh.scale.z}</scale>\n`;
+      }
+      
+      sdf += `${indentStr}      </mesh>\n`;
+      sdf += `${indentStr}    </geometry>\n`;
     }
   }
-
-  // mesh 型模型
-  if (obj.name && isModelInList(obj.name)) {
-    let modelName = obj.name.split('_')[0];
-    let meshFile = guessMeshFile(modelName);
-    let scale = '0.0254 0.0254 0.0254';
-    return `${pad}<mesh>
-${pad}  <scale>${scale}</scale>
-${pad}  <uri>model://${modelName}/meshes/${meshFile}</uri>
-${pad}</mesh>`;
-  }
-
-  return `${pad}<!-- 未知几何体 -->`;
+  
+  return sdf;
 }
 
+// 辅助函数：递归查找网格对象
 function findMeshRecursive(obj) {
-  if (!obj) return null;
-  if (obj instanceof THREE.Mesh) return obj;
-  if (obj.children && obj.children.length > 0) {
-    for (let i = 0; i < obj.children.length; ++i) {
-      let found = findMeshRecursive(obj.children[i]);
-      if (found) return found;
+  if (obj instanceof THREE.Mesh) {
+    return obj;
+  }
+  
+  for (let child of obj.children) {
+    const mesh = findMeshRecursive(child);
+    if (mesh) {
+      return mesh;
     }
   }
   return null;
@@ -3252,62 +3301,53 @@ function isModelInList(name) {
 }
 
 function guessMeshFile(modelName) {
+  // 检查模型是否在预定义列表中
+  if (isModelInList(modelName)) {
+    // 如果模型在列表中，使用其原始网格文件
+    return `${modelName}.dae`;  // 或其他适当的扩展名
+  }
+  
   // 约定优先顺序
   const exts = ['.dae', '.obj', '.stl'];
   // 由于前端无法直接读取目录，这里只能假定文件存在
-  // 你可以在服务端生成一个映射表，前端通过 window.modelMeshMap 访问
   if (window.modelMeshMap && window.modelMeshMap[modelName]) {
     return window.modelMeshMap[modelName];
   }
-  // 否则默认优先顺序
-  for (let i = 0; i < exts.length; ++i) {
-    // 你可以用 ajax/head 请求去试探文件是否存在（不推荐，效率低）
-    // 这里只返回第一个
-    return modelName + exts[i];
-  }
-  // fallback
-  return modelName + '.obj';
+  
+  // 否则返回默认扩展名
+  return modelName + '.dae';
 }
 
 function exportMaterialSDF(visualObj, indent = 0) {
-  let pad = ' '.repeat(indent);
-  // 尝试从 visualObj 的 userData 或 material 属性获取材质信息
-  let material = null;
-  let mesh = findMeshRecursive(visualObj);
+  let sdf = '';
+  const indentStr = ' '.repeat(indent);
+  
+  sdf += `${indentStr}    <material>\n`;
+  
+  // 获取材质
+  const mesh = findMeshRecursive(visualObj);
   if (mesh && mesh.material) {
-    material = mesh.material;
+    const mat = mesh.material;
+    
+    // 导出材质脚本
+    if (mat.name) {
+      sdf += `${indentStr}      <script>\n`;
+      sdf += `${indentStr}        <uri>model://${visualObj.name.replace(/_\d+$/, '')}/materials/scripts</uri>\n`;
+      sdf += `${indentStr}        <uri>model://${visualObj.name.replace(/_\d+$/, '')}/materials/textures</uri>\n`;
+      sdf += `${indentStr}        <name>${mat.name}</name>\n`;
+      sdf += `${indentStr}      </script>\n`;
+    }
+    
+    // 导出纹理
+    if (mat.map) {
+      sdf += `${indentStr}      <texture>\n`;
+      const textureName = mat.map.name || `${visualObj.name.replace(/_\d+$/, '')}_texture.png`;
+      sdf += `${indentStr}        <uri>model://${visualObj.name.replace(/_\d+$/, '')}/materials/textures/${textureName}</uri>\n`;
+      sdf += `${indentStr}      </texture>\n`;
+    }
   }
-  // 你可以根据实际情况扩展 userData 里的材质
-  // 默认材质
-  let scriptUri = 'file://media/materials/scripts/gazebo.material';
-  let scriptName = 'Gazebo/Grey';
-  let ambient = '0.1 0.1 0.1 1';
-  let diffuse = '0.7 0.7 0.7 1';
-  let specular = '0.01 0.01 0.01 1';
-  let emissive = '0 0 0 1';
-  let opacity = '1';
-
-  // 优先从 userData 或 mesh.material 里获取材质名
-  if (visualObj.userData && visualObj.userData.materialName) {
-    scriptName = visualObj.userData.materialName;
-  } else if (material && material.name) {
-    scriptName = material.name;
-  }
-
-  // 其它参数同理可自动获取
-  // ...
-
-  let lines = [];
-  lines.push(`${pad}<material>`);
-  lines.push(`${pad}  <script>`);
-  lines.push(`${pad}    <uri>${scriptUri}</uri>`);
-  lines.push(`${pad}    <name>${scriptName}</name>`);
-  lines.push(`${pad}  </script>`);
-  lines.push(`${pad}  <ambient>${ambient}</ambient>`);
-  lines.push(`${pad}  <diffuse>${diffuse}</diffuse>`);
-  lines.push(`${pad}  <specular>${specular}</specular>`);
-  lines.push(`${pad}  <emissive>${emissive}</emissive>`);
-  lines.push(`${pad}  <opacity>${opacity}</opacity>`);
-  lines.push(`${pad}</material>`);
-  return lines.join('\n');
+  
+  sdf += `${indentStr}    </material>\n`;
+  
+  return sdf;
 }
