@@ -3597,3 +3597,268 @@ function extendPartialModelName(partialName) {
   
   return commonExtensions[partialName] || partialName;
 }
+
+// 改进后的复合模型导出函数
+function exportComplexModelSDF(obj, indent = 0) {
+  const indentStr = ' '.repeat(indent);
+  let sdf = '';
+  
+  // 获取模型名称
+  const fullName = obj.name || '';
+  const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
+  
+  sdf += `${indentStr}<model name="${modelName}">\n`;
+  sdf += `${indentStr}  <pose>${obj.position.x} ${obj.position.y} ${obj.position.z} 0 0 0</pose>\n`;
+  sdf += `${indentStr}  <static>1</static>\n`;
+  
+  // 创建主链接
+  sdf += `${indentStr}  <link name="link">\n`;
+  
+  // 添加基本惯性属性
+  sdf += `${indentStr}    <inertial>\n`;
+  sdf += `${indentStr}      <mass>1</mass>\n`;
+  sdf += `${indentStr}    </inertial>\n`;
+  
+  // 查找并导出所有子部件
+  const parts = findModelPartsWithTransforms(obj);
+  
+  // 为每个部件创建碰撞和视觉元素
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    // 跳过不需要的子元素
+    if (part.object.name && (part.object.name.includes('joint') || part.object.name.includes('helper'))) {
+      continue;
+    }
+    
+    // 使用计算好的相对变换
+    const relPos = part.relativePosition;
+    const relRot = part.relativeRotation;
+    
+    // 导出碰撞元素
+    sdf += `${indentStr}    <collision name="collision_${i}">\n`;
+    sdf += `${indentStr}      <pose>${relPos.x} ${relPos.y} ${relPos.z} ${relRot.x} ${relRot.y} ${relRot.z}</pose>\n`;
+    sdf += `${indentStr}      <geometry>\n`;
+    
+    // 根据几何体类型导出不同的参数
+    if (part.object.geometry && part.object.geometry.type === 'BoxGeometry') {
+      const width = part.object.geometry.parameters.width || 1;
+      const height = part.object.geometry.parameters.height || 1;
+      const depth = part.object.geometry.parameters.depth || 1;
+      
+      sdf += `${indentStr}        <box>\n`;
+      sdf += `${indentStr}          <size>${width} ${height} ${depth}</size>\n`;
+      sdf += `${indentStr}        </box>\n`;
+    } else if (part.object.geometry && part.object.geometry.type === 'SphereGeometry') {
+      const radius = part.object.geometry.parameters.radius || 0.5;
+      
+      sdf += `${indentStr}        <sphere>\n`;
+      sdf += `${indentStr}          <radius>${radius}</radius>\n`;
+      sdf += `${indentStr}        </sphere>\n`;
+    } else if (part.object.geometry && part.object.geometry.type === 'CylinderGeometry') {
+      const radius = part.object.geometry.parameters.radiusTop || 0.5;
+      const length = part.object.geometry.parameters.height || 1;
+      
+      sdf += `${indentStr}        <cylinder>\n`;
+      sdf += `${indentStr}          <radius>${radius}</radius>\n`;
+      sdf += `${indentStr}          <length>${length}</length>\n`;
+      sdf += `${indentStr}        </cylinder>\n`;
+    } else {
+      // 默认为盒子 (1x1x1)
+      sdf += `${indentStr}        <box>\n`;
+      sdf += `${indentStr}          <size>0.2 0.2 0.2</size>\n`;
+      sdf += `${indentStr}        </box>\n`;
+    }
+    
+    sdf += `${indentStr}      </geometry>\n`;
+    // 添加碰撞属性
+    sdf += `${indentStr}      <max_contacts>10</max_contacts>\n`;
+    sdf += `${indentStr}      <surface>\n`;
+    sdf += `${indentStr}        <contact>\n`;
+    sdf += `${indentStr}          <ode/>\n`;
+    sdf += `${indentStr}        </contact>\n`;
+    sdf += `${indentStr}        <bounce/>\n`;
+    sdf += `${indentStr}        <friction>\n`;
+    sdf += `${indentStr}          <torsional>\n`;
+    sdf += `${indentStr}            <ode/>\n`;
+    sdf += `${indentStr}          </torsional>\n`;
+    sdf += `${indentStr}          <ode/>\n`;
+    sdf += `${indentStr}        </friction>\n`;
+    sdf += `${indentStr}      </surface>\n`;
+    sdf += `${indentStr}    </collision>\n`;
+    
+    // 导出视觉元素
+    sdf += `${indentStr}    <visual name="visual_${i}">\n`;
+    sdf += `${indentStr}      <pose>${relPos.x} ${relPos.y} ${relPos.z} ${relRot.x} ${relRot.y} ${relRot.z}</pose>\n`;
+    sdf += `${indentStr}      <geometry>\n`;
+    
+    // 使用与碰撞元素相同的几何体
+    if (part.object.geometry && part.object.geometry.type === 'BoxGeometry') {
+      const width = part.object.geometry.parameters.width || 1;
+      const height = part.object.geometry.parameters.height || 1;
+      const depth = part.object.geometry.parameters.depth || 1;
+      
+      sdf += `${indentStr}        <box>\n`;
+      sdf += `${indentStr}          <size>${width} ${height} ${depth}</size>\n`;
+      sdf += `${indentStr}        </box>\n`;
+    } else if (part.object.geometry && part.object.geometry.type === 'SphereGeometry') {
+      const radius = part.object.geometry.parameters.radius || 0.5;
+      
+      sdf += `${indentStr}        <sphere>\n`;
+      sdf += `${indentStr}          <radius>${radius}</radius>\n`;
+      sdf += `${indentStr}        </sphere>\n`;
+    } else if (part.object.geometry && part.object.geometry.type === 'CylinderGeometry') {
+      const radius = part.object.geometry.parameters.radiusTop || 0.5;
+      const length = part.object.geometry.parameters.height || 1;
+      
+      sdf += `${indentStr}        <cylinder>\n`;
+      sdf += `${indentStr}          <radius>${radius}</radius>\n`;
+      sdf += `${indentStr}          <length>${length}</length>\n`;
+      sdf += `${indentStr}        </cylinder>\n`;
+    } else {
+      // 默认为盒子 (1x1x1)
+      sdf += `${indentStr}        <box>\n`;
+      sdf += `${indentStr}          <size>0.2 0.2 0.2</size>\n`;
+      sdf += `${indentStr}        </box>\n`;
+    }
+    
+    sdf += `${indentStr}      </geometry>\n`;
+    
+    // 添加材质
+    // 检查部件是否有材质
+    if (part.object.material) {
+      // 获取材质颜色
+      const color = part.object.material.color ? 
+        { r: part.object.material.color.r, g: part.object.material.color.g, b: part.object.material.color.b } : 
+        { r: 0.8, g: 0.8, b: 0.8 };
+        
+      // 尝试获取材质名称
+      let materialName = 'Gazebo/Grey';
+      if (part.object.material.name && part.object.material.name.startsWith('Gazebo/')) {
+        materialName = part.object.material.name;
+      } else if (colorIsWood(color)) {
+        materialName = 'Gazebo/Wood';
+      }
+      
+      sdf += `${indentStr}      <material>\n`;
+      sdf += `${indentStr}        <script>\n`;
+      sdf += `${indentStr}          <uri>file://media/materials/scripts/gazebo.material</uri>\n`;
+      sdf += `${indentStr}          <name>${materialName}</name>\n`;
+      sdf += `${indentStr}        </script>\n`;
+      sdf += `${indentStr}      </material>\n`;
+    } else {
+      // 使用默认材质
+      sdf += `${indentStr}      <material>\n`;
+      sdf += `${indentStr}        <script>\n`;
+      sdf += `${indentStr}          <uri>file://media/materials/scripts/gazebo.material</uri>\n`;
+      sdf += `${indentStr}          <name>Gazebo/Grey</name>\n`;
+      sdf += `${indentStr}        </script>\n`;
+      sdf += `${indentStr}      </material>\n`;
+    }
+    
+    sdf += `${indentStr}    </visual>\n`;
+  }
+  
+  // 如果没有找到任何部件，添加默认的碰撞和视觉元素
+  if (parts.length === 0) {
+    sdf += exportDefaultCollisionSDF(obj, indent + 4);
+    sdf += exportDefaultVisualSDF(obj, indent + 4);
+  }
+  
+  sdf += `${indentStr}    <self_collide>0</self_collide>\n`;
+  sdf += `${indentStr}    <enable_wind>0</enable_wind>\n`;
+  sdf += `${indentStr}    <kinematic>0</kinematic>\n`;
+  sdf += `${indentStr}  </link>\n`;
+  sdf += `${indentStr}</model>\n`;
+  
+  return sdf;
+}
+
+// 改进的函数，获取带有正确相对变换的模型部件
+function findModelPartsWithTransforms(obj) {
+  const parts = [];
+  // 模型世界变换矩阵的逆矩阵，用于计算相对变换
+  const modelMatrixInverse = new THREE.Matrix4();
+  obj.updateMatrixWorld(true); // 确保世界矩阵是最新的
+  
+  // 在THREE.js中，逆矩阵方法是getInverse，而非invert
+  modelMatrixInverse.getInverse(obj.matrixWorld);
+  
+  // 递归遍历对象的子层级
+  function traverse(object) {
+    // 检查是否有几何体
+    if (object.geometry && (object instanceof THREE.Mesh)) {
+      // 计算部件相对于模型的位置和旋转
+      object.updateMatrixWorld(true); // 确保世界矩阵是最新的
+      
+      // 计算相对矩阵
+      const relativeMatrix = new THREE.Matrix4();
+      relativeMatrix.multiplyMatrices(modelMatrixInverse, object.matrixWorld);
+      
+      // 从矩阵中提取位置
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      relativeMatrix.decompose(position, quaternion, scale);
+      
+      // 从四元数转换为欧拉角（以弧度为单位）
+      const euler = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ');
+      
+      parts.push({
+        object: object,
+        relativePosition: {
+          x: position.x,
+          y: position.y,
+          z: position.z
+        },
+        relativeRotation: {
+          x: euler.x,
+          y: euler.y,
+          z: euler.z
+        },
+        relativeScale: {
+          x: scale.x,
+          y: scale.y,
+          z: scale.z
+        }
+      });
+    }
+    
+    // 递归处理子对象
+    if (object.children && object.children.length > 0) {
+      object.children.forEach(child => traverse(child));
+    }
+  }
+  
+  traverse(obj);
+  return parts;
+}
+
+// 检查颜色是否接近木头颜色
+function colorIsWood(color) {
+  // 木头颜色的范围（棕色）
+  return (color.r > 0.5 && color.g > 0.25 && color.g < 0.6 && color.b < 0.3);
+}
+
+// 修改exportModelSDF函数，使用通用的复合模型导出
+function exportModelSDF(obj, indent = 0) {
+  const fullName = obj.name || '';
+  const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
+  
+  // 判断是否为复合模型
+  if (isCompositeModel(obj)) {
+    return exportComplexModelSDF(obj, indent);
+  }
+  
+  // 剩余的处理保持不变...
+  const indentStr = ' '.repeat(indent);
+  let sdf = '';
+  
+  sdf += `${indentStr}<model name="${modelName}">\n`;
+  sdf += `${indentStr}  <pose>${obj.position.x} ${obj.position.y} ${obj.position.z} 0 0 0</pose>\n`;
+  
+  // 为基本几何体或网格模型导出链接
+  sdf += exportLinkSDF(obj, indent + 2);
+  
+  sdf += `${indentStr}</model>\n`;
+  return sdf;
+}
