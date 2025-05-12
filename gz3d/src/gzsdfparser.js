@@ -1361,3 +1361,60 @@ GZ3D.SdfParser.prototype.fileFromUrl = function(url)
   }
   return xhttp.responseXML;
 };
+
+/**
+ * 获取模型的默认高度偏移
+ * @param {string} modelName - 模型名称
+ * @returns {number} - z 轴高度偏移
+ */
+GZ3D.SdfParser.prototype.getModelZOffset = function(modelName) {
+  // 模型高度偏移表
+  var modelZOffsets = {
+    'fast_food': 3.15931,
+    'house_1': 2.5,
+    'gas_station': 3.0,
+    'ambulance': 0.8,
+    'person_standing': 0.85,
+    'person_walking': 0.85,
+    'table': 0.45,
+    'table_marble': 0.5
+    // 可以根据需要添加更多模型
+  };
+  
+  // 检查是否有预定义高度
+  for (var key in modelZOffsets) {
+    if (modelName === key || modelName.indexOf(key) === 0) {
+      return modelZOffsets[key];
+    }
+  }
+  
+  // 默认返回 1.0
+  return 1.0;
+};
+
+/**
+ * 获取模型的默认缩放
+ * @param {string} modelName - 模型名称
+ * @returns {object} - 缩放对象 {x, y, z}
+ */
+GZ3D.SdfParser.prototype.getModelScale = function(modelName) {
+  // 模型缩放表
+  var modelScales = {
+    'fast_food': { x: 3, y: 3, z: 2 },
+    'house_1': { x: 1, y: 1, z: 1 },
+    'ambulance': { x: 1, y: 1, z: 1 },
+    'person_standing': { x: 1, y: 1, z: 1 },
+    'person_walking': { x: 1, y: 1, z: 1 }
+    // 可以根据需要添加更多模型
+  };
+  
+  // 检查是否有预定义缩放
+  for (var key in modelScales) {
+    if (modelName === key || modelName.indexOf(key) === 0) {
+      return modelScales[key];
+    }
+  }
+  
+  // 默认返回 1,1,1
+  return { x: 1, y: 1, z: 1 };
+};

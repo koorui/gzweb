@@ -57,38 +57,60 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   // 判断是否为简单几何体（方块、球体、圆柱体）
   var isSimpleGeometry = true;
   
-  if (entity === 'box')
-  {
-    mesh = this.scene.createBox(1, 1, 1);
-    mesh.material = this.spawnedShapeMaterial;
-  }
-  else if (entity === 'sphere')
-  {
-    mesh = this.scene.createSphere(0.5);
-    mesh.material = this.spawnedShapeMaterial;
-  }
-  else if (entity === 'cylinder')
-  {
-    mesh = this.scene.createCylinder(0.5, 1.0);
-    mesh.material = this.spawnedShapeMaterial;
-  }
-  else if (entity === 'pointlight')
-  {
-    mesh = this.scene.createLight(1);
-  }
-  else if (entity === 'spotlight')
-  {
-    mesh = this.scene.createLight(2);
-  }
-  else if (entity === 'directionallight')
-  {
-    mesh = this.scene.createLight(3);
-  }
-  else
-  {
+  // 获取基础模型名（移除数字后缀）
+  var baseModelName = getBaseModelName(entity);
+  
+  if (entity === 'box' || entity === 'sphere' || entity === 'cylinder' || 
+      entity === 'pointlight' || entity === 'spotlight' || entity === 'directionallight') {
+    if (entity === 'box')
+    {
+      mesh = this.scene.createBox(1, 1, 1);
+      mesh.material = this.spawnedShapeMaterial;
+    }
+    else if (entity === 'sphere')
+    {
+      mesh = this.scene.createSphere(0.5);
+      mesh.material = this.spawnedShapeMaterial;
+    }
+    else if (entity === 'cylinder')
+    {
+      mesh = this.scene.createCylinder(0.5, 1.0);
+      mesh.material = this.spawnedShapeMaterial;
+    }
+    else if (entity === 'pointlight')
+    {
+      mesh = this.scene.createLight(1);
+    }
+    else if (entity === 'spotlight')
+    {
+      mesh = this.scene.createLight(2);
+    }
+    else if (entity === 'directionallight')
+    {
+      mesh = this.scene.createLight(3);
+    }
+  } else {
     mesh = this.sdfParser.loadSDF(entity);
-    //TODO: add transparency to the object
     isSimpleGeometry = false; // 复杂模型
+    
+    // 保存模型信息到 userData
+    if (!this.obj.userData) {
+      this.obj.userData = {};
+    }
+    
+    // 保存模型类型和名称
+    this.obj.userData.modelType = 'mesh';
+    this.obj.userData.baseModelName = baseModelName;
+    
+    // 获取并保存模型的默认 z 轴偏移
+    if (this.sdfParser) {
+      var zOffset = this.sdfParser.getModelZOffset(baseModelName);
+      this.obj.userData.modelZOffset = zOffset;
+      
+      // 获取并保存默认缩放
+      var defaultScale = this.sdfParser.getModelScale(baseModelName);
+      this.obj.userData.defaultScale = defaultScale;
+    }
   }
 
   this.obj.name = this.generateUniqueName(entity);
@@ -481,3 +503,13 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 
   this.active = true;
 };
+
+/**
+ * 获取有效的基础模型名称，处理带数字后缀的情况
+ * @param {string} entity - 模型名称，可能包含数字后缀
+ * @returns {string} - 有效的基础模型名
+ */
+function getBaseModelName(entity) {
+  // 移除最后的数字后缀，例如 "fast_food_0" -> "fast_food"
+  return entity.replace(/_\d+$/, '');
+}

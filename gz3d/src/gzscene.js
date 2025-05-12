@@ -3109,58 +3109,253 @@ GZ3D.Scene.prototype.exportSDF = function() {
   return sdf.join('\n');
 };
 
-// ====== 以下为辅助函数 ======
-
-// 导出模型SDF
+/**
+ * 导出模型的 SDF
+ * @param {THREE.Object3D} obj - 模型对象
+ * @param {number} indent - 缩进级别
+ * @returns {string} - SDF 字符串
+ */
 function exportModelSDF(obj, indent = 0) {
-  const fullName = obj.name || '';
-  const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
-  
-  // 判断是否为复合模型
-  if (isCompositeModel(obj)) {
+  // 优先使用userData中的信息判断模型类型
+  console.log(obj.name);
+  if (obj.userData && obj.userData.modelType === 'mesh') {
+    
+    console.log(obj.userData.modelType);
+    // 对mesh类型模型使用特殊处理
+    var modelName = obj.name || 'model';
+    // 使用新的函数获取正确的基础模型名
+    var baseModelName = obj.userData.baseModelName || getBaseModelName(modelName);
+    
+    var indentStr = ' '.repeat(indent);
+    var childIndentStr = ' '.repeat(indent + 2);
+    var grandChildIndentStr = ' '.repeat(indent + 4);
+    var greatGrandChildIndentStr = ' '.repeat(indent + 6);
+    
+    // 从userData获取模型配置
+    var modelZOffset = obj.userData.modelZOffset || 0;
+    var defaultScale = obj.userData.defaultScale || {x: 1, y: 1, z: 1};
+    
+    var position = obj.position;
+    var quaternion = obj.quaternion;
+    
+    // 获取欧拉角，用于pose
+    var euler = new THREE.Euler().setFromQuaternion(quaternion);
+    
+    var sdf = `${indentStr}<model name='${modelName}'>\n`;
+    sdf += `${childIndentStr}<static>1</static>\n`;
+    
+    // 添加link
+    sdf += `${childIndentStr}<link name='link'>\n`;
+    
+    // 注意：在fast_food的格式中，pose在link级别
+    sdf += `${grandChildIndentStr}<pose>0 0 ${modelZOffset} 0 -0 0</pose>\n`;
+    
+    // 添加collision
+    sdf += `${grandChildIndentStr}<collision name='collision'>\n`;
+    sdf += `${greatGrandChildIndentStr}<geometry>\n`;
+    sdf += `${greatGrandChildIndentStr}  <mesh>\n`;
+    sdf += `${greatGrandChildIndentStr}    <scale>${defaultScale.x} ${defaultScale.y} ${defaultScale.z}</scale>\n`;
+    sdf += `${greatGrandChildIndentStr}    <uri>model://${baseModelName}/meshes/${baseModelName}.dae</uri>\n`;
+    sdf += `${greatGrandChildIndentStr}  </mesh>\n`;
+    sdf += `${greatGrandChildIndentStr}</geometry>\n`;
+    
+    // 添加碰撞属性
+    sdf += `${greatGrandChildIndentStr}<max_contacts>10</max_contacts>\n`;
+    sdf += `${greatGrandChildIndentStr}<surface>\n`;
+    sdf += `${greatGrandChildIndentStr}  <contact>\n`;
+    sdf += `${greatGrandChildIndentStr}    <ode/>\n`;
+    sdf += `${greatGrandChildIndentStr}  </contact>\n`;
+    sdf += `${greatGrandChildIndentStr}  <bounce/>\n`;
+    sdf += `${greatGrandChildIndentStr}  <friction>\n`;
+    sdf += `${greatGrandChildIndentStr}    <torsional>\n`;
+    sdf += `${greatGrandChildIndentStr}      <ode/>\n`;
+    sdf += `${greatGrandChildIndentStr}    </torsional>\n`;
+    sdf += `${greatGrandChildIndentStr}    <ode/>\n`;
+    sdf += `${greatGrandChildIndentStr}  </friction>\n`;
+    sdf += `${greatGrandChildIndentStr}</surface>\n`;
+    sdf += `${grandChildIndentStr}</collision>\n`;
+    
+    // 添加visual
+    sdf += `${grandChildIndentStr}<visual name='visual'>\n`;
+    sdf += `${greatGrandChildIndentStr}<geometry>\n`;
+    sdf += `${greatGrandChildIndentStr}  <mesh>\n`;
+    sdf += `${greatGrandChildIndentStr}    <scale>${defaultScale.x} ${defaultScale.y} ${defaultScale.z}</scale>\n`;
+    sdf += `${greatGrandChildIndentStr}    <uri>model://${baseModelName}/meshes/${baseModelName}.dae</uri>\n`;
+    sdf += `${greatGrandChildIndentStr}  </mesh>\n`;
+    sdf += `${greatGrandChildIndentStr}</geometry>\n`;
+    
+    // 添加材质
+    sdf += `${greatGrandChildIndentStr}<material>\n`;
+    sdf += `${greatGrandChildIndentStr}  <script>\n`;
+    sdf += `${greatGrandChildIndentStr}    <uri>model://${baseModelName}/materials/scripts</uri>\n`;
+    sdf += `${greatGrandChildIndentStr}    <uri>model://${baseModelName}/materials/textures</uri>\n`;
+    sdf += `${greatGrandChildIndentStr}    <name>${baseModelName.charAt(0).toUpperCase() + baseModelName.slice(1)}/Diffuse</name>\n`;
+    sdf += `${greatGrandChildIndentStr}  </script>\n`;
+    sdf += `${greatGrandChildIndentStr}  <shader type='normal_map_tangent_space'>\n`;
+    sdf += `${greatGrandChildIndentStr}    <normal_map>${baseModelName.charAt(0).toUpperCase() + baseModelName.slice(1)}_Normal.png</normal_map>\n`;
+    sdf += `${greatGrandChildIndentStr}  </shader>\n`;
+    sdf += `${greatGrandChildIndentStr}</material>\n`;
+    sdf += `${grandChildIndentStr}</visual>\n`;
+    
+    // 添加其他属性
+    sdf += `${grandChildIndentStr}<self_collide>0</self_collide>\n`;
+    sdf += `${grandChildIndentStr}<enable_wind>0</enable_wind>\n`;
+    sdf += `${grandChildIndentStr}<kinematic>0</kinematic>\n`;
+    sdf += `${childIndentStr}</link>\n`;
+    
+    // 模型级别的pose（位于链接之后）
+    sdf += `${childIndentStr}<pose>${position.x} ${position.y} ${position.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
+    sdf += `${indentStr}</model>`;
+    
+    return sdf;
+  } 
+  // 检查是否是复合模型
+  else if (isCompositeModel(obj)) {
     return exportComplexModelSDF(obj, indent);
   }
-  
-  const indentStr = ' '.repeat(indent);
-  let sdf = '';
-  
-  // 获取位置和旋转信息
-  let position = obj.position;
-  let quaternion = obj.quaternion;
-  
-  // 如果userData中有保存的位置和旋转信息，优先使用
-  if (obj.userData) {
-    if (obj.userData.originalPosition) {
-      // 使用保存的位置信息
-      position = new THREE.Vector3(
-        obj.userData.originalPosition.x,
-        obj.userData.originalPosition.y,
-        obj.userData.originalPosition.z
-      );
+  else {
+    // 处理简单模型
+    var modelName = obj.name || 'model';
+    // 提取基础模型名（去除编号等）
+    var baseModelName = modelName.split('_')[0];
+    
+    var indentStr = ' '.repeat(indent);
+    var childIndentStr = ' '.repeat(indent + 2);
+    var grandChildIndentStr = ' '.repeat(indent + 4);
+    
+    // 获取世界位置和方向
+    var position = obj.position;
+    var quaternion = obj.quaternion;
+    
+    var sdf = `${indentStr}<model name="${modelName}">\n`;
+    
+    // 添加静态标记
+    sdf += `${childIndentStr}<static>1</static>\n`;
+    
+    // 添加link
+    sdf += `${childIndentStr}<link name="link">\n`;
+    
+    // 检查子对象中是否有visual或collision
+    var hasVisualOrCollision = false;
+    obj.traverse(function(child) {
+      if (isVisual(child) || isCollision(child)) {
+        hasVisualOrCollision = true;
+      }
+    });
+    
+    // 如果没有visual或collision子对象，使用默认的
+    if (!hasVisualOrCollision) {
+      // 添加默认visual和collision
+      sdf += exportDefaultVisualSDF(obj, indent + 2);
+      sdf += exportDefaultCollisionSDF(obj, indent + 2);
+    } else {
+      // 遍历所有子对象，添加visual和collision
+      obj.traverse(function(child) {
+        if (isVisual(child)) {
+          sdf += exportVisualSDF(child, indent + 2);
+        } else if (isCollision(child)) {
+          sdf += exportCollisionSDF(child, indent + 2);
+        }
+      });
     }
     
-    if (obj.userData.originalQuaternion) {
-      // 使用保存的旋转信息
-      quaternion = new THREE.Quaternion(
-        obj.userData.originalQuaternion.x,
-        obj.userData.originalQuaternion.y,
-        obj.userData.originalQuaternion.z,
-        obj.userData.originalQuaternion.w
-      );
+    // 添加其他属性
+    sdf += `${grandChildIndentStr}<self_collide>0</self_collide>\n`;
+    sdf += `${grandChildIndentStr}<enable_wind>0</enable_wind>\n`;
+    sdf += `${grandChildIndentStr}<kinematic>0</kinematic>\n`;
+    sdf += `${childIndentStr}</link>\n`;
+    
+    // 添加模型级别的pose（世界坐标）
+    var euler = new THREE.Euler().setFromQuaternion(quaternion);
+    sdf += `${childIndentStr}<pose>${position.x} ${position.y} ${position.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
+    sdf += `${indentStr}</model>`;
+    
+    return sdf;
+  }
+}
+
+/**
+ * 获取模型缩放
+ * @param {string} modelName - 模型名称
+ * @returns {object} - 包含x,y,z缩放的对象
+ */
+function getModelScale(modelName) {
+  // 模型缩放表
+  var modelScales = {
+    'fast_food': { x: 3, y: 3, z: 2 },
+    'house_1': { x: 1, y: 1, z: 1 },
+    'ambulance': { x: 1, y: 1, z: 1 },
+    'person_standing': { x: 1, y: 1, z: 1 },
+    'person_walking': { x: 1, y: 1, z: 1 }
+    // 可以根据需要添加更多模型
+  };
+  
+  // 检查是否有预定义缩放
+  for (var key in modelScales) {
+    if (modelName === key || modelName.indexOf(key) === 0) {
+      return modelScales[key];
     }
   }
   
-  // 将四元数转换为欧拉角
-  const euler = new THREE.Euler().setFromQuaternion(quaternion);
+  // 默认返回 1,1,1
+  return { x: 1, y: 1, z: 1 };
+}
+
+/**
+ * 检查是否为网格模型
+ * @param {THREE.Object3D} obj - 模型对象
+ * @returns {boolean} - 是否为网格模型
+ */
+function isMeshModel(obj) {
+  const name = obj.name || '';
+  const baseName = name.split('_')[0].toLowerCase();
   
-  sdf += `${indentStr}<model name="${modelName}">\n`;
-  sdf += `${indentStr}  <pose>${position.x} ${position.y} ${position.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
+  // 排除简单几何体
+  if (baseName === 'box' || baseName === 'sphere' || baseName === 'cylinder' ||
+      baseName === 'pointlight' || baseName === 'spotlight' || baseName === 'directionallight') {
+    return false;
+  }
   
-  // 为基本几何体或网格模型导出链接
-  sdf += exportLinkSDF(obj, indent + 2);
+  // 检查userData
+  if (obj.userData && obj.userData.modelType === 'mesh') {
+    return true;
+  }
   
-  sdf += `${indentStr}</model>\n`;
-  return sdf;
+  // 特定模型明确标记为网格模型
+  const meshModels = [
+    'fast_food', 'gas_station', 'bookshelf', 'cafe', 'house',
+    'ambulance', 'table', 'table_marble', 'person_standing', 'person_walking'
+  ];
+  
+  for (const model of meshModels) {
+    if (baseName.indexOf(model) >= 0) {
+      return true;
+    }
+  }
+  
+  // 其他情况默认为非网格模型
+  return false;
+}
+
+/**
+ * 获取有效的模型名称
+ * @param {string} modelName - 原始模型名
+ * @returns {string} - 有效的模型名
+ */
+function getValidModelName(modelName) {
+  // 特殊映射
+  var specialMappings = {
+    'fast_food': 'fast_food', 
+    'house1': 'house_1',
+    'house2': 'house_2',
+    'house3': 'house_3'
+  };
+  
+  if (specialMappings[modelName]) {
+    return specialMappings[modelName];
+  }
+  
+  return modelName;
 }
 
 // 导出链接SDF
@@ -3943,28 +4138,28 @@ function colorIsWood(color) {
 }
 
 // 修改exportModelSDF函数，使用通用的复合模型导出
-function exportModelSDF(obj, indent = 0) {
-  const fullName = obj.name || '';
-  const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
+// function exportModelSDF(obj, indent = 0) {
+//   const fullName = obj.name || '';
+//   const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
   
-  // 判断是否为复合模型
-  if (isCompositeModel(obj)) {
-    return exportComplexModelSDF(obj, indent);
-  }
+//   // 判断是否为复合模型
+//   if (isCompositeModel(obj)) {
+//     return exportComplexModelSDF(obj, indent);
+//   }
   
-  // 剩余的处理保持不变...
-  const indentStr = ' '.repeat(indent);
-  let sdf = '';
+//   // 剩余的处理保持不变...
+//   const indentStr = ' '.repeat(indent);
+//   let sdf = '';
   
-  sdf += `${indentStr}<model name="${modelName}">\n`;
-  sdf += `${indentStr}  <pose>${obj.position.x} ${obj.position.y} ${obj.position.z} 0 0 0</pose>\n`;
+//   sdf += `${indentStr}<model name="${modelName}">\n`;
+//   sdf += `${indentStr}  <pose>${obj.position.x} ${obj.position.y} ${obj.position.z} 0 0 0</pose>\n`;
   
-  // 为基本几何体或网格模型导出链接
-  sdf += exportLinkSDF(obj, indent + 2);
+//   // 为基本几何体或网格模型导出链接
+//   sdf += exportLinkSDF(obj, indent + 2);
   
-  sdf += `${indentStr}</model>\n`;
-  return sdf;
-}
+//   sdf += `${indentStr}</model>\n`;
+//   return sdf;
+// }
 
 /**
  * 通用获取模型缩放比例的函数
