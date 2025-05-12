@@ -582,6 +582,10 @@ GZ3D.SdfParser.prototype.createGeom = function(geom, mat, parent)
         parent.scale.x = scale.x;
         parent.scale.y = scale.y;
         parent.scale.z = scale.z;
+        
+        // 添加下面这行，保存原始缩放信息
+        if (!parent.userData) parent.userData = {};
+        parent.userData.originalScale = { x: scale.x, y: scale.y, z: scale.z };
       }
 
       var modelUri = this.MATERIAL_ROOT + '/' + modelName;
@@ -979,6 +983,7 @@ GZ3D.SdfParser.prototype.spawnModelFromSDF = function(sdfObj)
     }
   }
 
+  this.scene.saveModelTransformInfo(modelObj);
   return modelObj;
 };
 

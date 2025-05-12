@@ -53,6 +53,10 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   this.callback = callback;
   this.obj = new THREE.Object3D();
   var mesh;
+  
+  // 判断是否为简单几何体（方块、球体、圆柱体）
+  var isSimpleGeometry = true;
+  
   if (entity === 'box')
   {
     mesh = this.scene.createBox(1, 1, 1);
@@ -84,10 +88,14 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   {
     mesh = this.sdfParser.loadSDF(entity);
     //TODO: add transparency to the object
+    isSimpleGeometry = false; // 复杂模型
   }
 
   this.obj.name = this.generateUniqueName(entity);
   this.obj.add(mesh);
+
+  // 记录是否为简单几何体，用于后续判断
+  this.obj.userData.isSimpleGeometry = isSimpleGeometry;
 
   // temp model appears within current view
   var pos = new THREE.Vector2(window.window.innerWidth/2, window.innerHeight/2);
@@ -96,8 +104,15 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
 
   this.obj.position.x = intersect.x;
   this.obj.position.y = intersect.y;
-  this.obj.position.z += 0.5;
-  // console.log('插入前场景对象数：', this.scene.children.length);
+  
+  // 只对简单几何体模型添加z轴偏移量
+  if (isSimpleGeometry) {
+    this.obj.position.z += 0.5;
+    console.log('添加z轴偏移量，model=' + entity);
+  } else {
+    console.log('不添加z轴偏移量，model=' + entity);
+  }
+  
   this.scene.add(this.obj);
   // console.log('插入后场景对象数：', this.scene.children.length);
   // For the inserted light to have effect
@@ -367,6 +382,56 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 
   this.callback = callback;
   this.obj = obj;
+  
+  // 判断是否为简单几何体
+  var isSimpleGeometry = false;
+  
+  // 检查对象或其子对象是否为简单几何体
+  function checkIfSimpleGeometry(object) {
+    // 如果对象自身被标记为简单几何体
+    if (object.userData && object.userData.isSimpleGeometry) {
+      return true;
+    }
+    
+    // 检查是否是简单几何体
+    if (object.geometry && (
+        object.geometry instanceof THREE.BoxGeometry || 
+        object.geometry instanceof THREE.SphereGeometry || 
+        object.geometry instanceof THREE.CylinderGeometry)) {
+      return true;
+    }
+    
+    // 检查是否是灯光
+    if (object instanceof THREE.Light || 
+        (object.children && object.children[0] instanceof THREE.Light)) {
+      return true;
+    }
+    
+    // 检查名称是否包含简单几何体关键词
+    if (object.name && (
+        object.name.toLowerCase().indexOf('box') >= 0 ||
+        object.name.toLowerCase().indexOf('sphere') >= 0 ||
+        object.name.toLowerCase().indexOf('ball') >= 0 ||
+        object.name.toLowerCase().indexOf('cylinder') >= 0 ||
+        object.name.toLowerCase().indexOf('light') >= 0)) {
+      return true;
+    }
+    
+    // 递归检查子对象
+    if (object.children) {
+      for (var i = 0; i < object.children.length; i++) {
+        if (checkIfSimpleGeometry(object.children[i])) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // 检查并设置是否为简单几何体
+  isSimpleGeometry = checkIfSimpleGeometry(obj);
+  obj.userData.isSimpleGeometry = isSimpleGeometry;
 
   // 递归唯一命名，避免多次导入name冲突
   function setUniqueName(obj, prefix) {
@@ -384,7 +449,14 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 
   this.obj.position.x = intersect.x;
   this.obj.position.y = intersect.y;
-  this.obj.position.z += 0.5;
+  
+  // 只对简单几何体添加z轴偏移量
+  if (isSimpleGeometry) {
+    this.obj.position.z += 0.5;
+    console.log('添加z轴偏移量，是简单几何体');
+  } else {
+    console.log('不添加z轴偏移量，是复杂模型');
+  }
 
   console.log('spawnFromSDF called, new object:', this.obj);
 

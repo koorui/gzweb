@@ -1484,6 +1484,7 @@ GZ3D.Scene.prototype.loadMeshFromUri = function(uri, submesh, centerSubmesh,
     var mesh = this.meshes[uri];
     mesh = mesh.clone();
     this.useSubMesh(mesh, submesh, centerSubmesh);
+    this.saveModelTransformInfo(mesh, uri);
     callback(mesh);
     return;
   }
@@ -1577,6 +1578,7 @@ GZ3D.Scene.prototype.loadMeshFromString = function(uri, submesh, centerSubmesh,
     var mesh = this.meshes[uri];
     mesh = mesh.clone();
     this.useSubMesh(mesh, submesh, centerSubmesh);
+    this.saveModelTransformInfo(mesh, uri);
     callback(mesh);
     return;
   }
@@ -2294,10 +2296,102 @@ GZ3D.Scene.prototype.getParentByPartialName = function(object, name)
 
 /**
  * Select entity
- * @param {} object
+ * @param {THREE.Object3D} entity
  */
 GZ3D.Scene.prototype.selectEntity = function(object)
 {
+  // 添加打印实体信息部分
+  if (object) {
+    // console.log('object', object);
+    console.group('%c选中实体详细信息', 'color: #3498db; font-weight: bold; font-size: 14px;');
+    
+    console.log('%c基本信息:', 'color: #2ecc71; font-weight: bold;');
+    console.log('名称:', object.name);
+    console.log('类型:', object.type);
+    console.log('ID:', object.id);
+    console.log('UUID:', object.uuid);
+    
+    // 位置、旋转和缩放信息
+    console.log('%c变换信息:', 'color: #2ecc71; font-weight: bold;');
+    console.log('位置 (local):', {x: object.position.x, y: object.position.y, z: object.position.z});
+    
+    // 获取世界坐标
+    var worldPosition = new THREE.Vector3();
+    var worldQuaternion = new THREE.Quaternion();
+    var worldScale = new THREE.Vector3();
+    object.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+    
+    console.log('位置 (world):', {x: worldPosition.x, y: worldPosition.y, z: worldPosition.z});
+    console.log('旋转:', {
+      x: object.rotation.x, 
+      y: object.rotation.y, 
+      z: object.rotation.z, 
+      order: object.rotation.order
+    });
+    console.log('四元数:', {
+      x: object.quaternion.x, 
+      y: object.quaternion.y, 
+      z: object.quaternion.z,
+      w: object.quaternion.w
+    });
+    console.log('缩放:', {x: object.scale.x, y: object.scale.y, z: object.scale.z});
+    
+    // 如果有 userData 信息
+    if (object.userData && Object.keys(object.userData).length > 0) {
+      console.log('%cuserData:', 'color: #2ecc71; font-weight: bold;');
+      console.log(object.userData);
+    }
+    
+    // 如果有材质信息
+    if (object.material) {
+      console.log('%c材质信息:', 'color: #2ecc71; font-weight: bold;');
+      console.log(object.material);
+    }
+    
+    // 检查是否有几何体
+    if (object.geometry) {
+      console.log('%c几何体信息:', 'color: #2ecc71; font-weight: bold;');
+      console.log(object.geometry);
+    }
+    
+    // 打印子对象
+    if (object.children && object.children.length > 0) {
+      console.log('%c子对象列表:', 'color: #2ecc71; font-weight: bold;');
+      console.log('子对象数量:', object.children.length);
+      
+      for (var i = 0; i < object.children.length; i++) {
+        var child = object.children[i];
+        console.log('子对象 #' + i + ':', {
+          name: child.name,
+          type: child.type,
+          id: child.id,
+          isLight: child instanceof THREE.Light
+        });
+      }
+    }
+    
+    // 打印服务器属性（如果有）
+    if (object.serverProperties) {
+      console.log('%c服务器属性:', 'color: #2ecc71; font-weight: bold;');
+      console.log(object.serverProperties);
+    }
+    
+    // 打印其他有用信息
+    console.log('%c其他属性:', 'color: #2ecc71; font-weight: bold;');
+    console.log('是否可见:', object.visible);
+    console.log('渲染顺序:', object.renderOrder);
+    console.log('是否可点击:', object.clickable === true);
+    console.log('是否投射阴影:', object.castShadow === true);
+    console.log('是否接收阴影:', object.receiveShadow === true);
+    
+    // 完整的实体对象
+    console.log('%c完整实体对象:', 'color: #e74c3c; font-weight: bold;');
+    console.log(object);
+    
+    console.groupEnd();
+  }
+  
+  // 保留原有函数逻辑
   if (object)
   {
     if (object !== this.selectedEntity)
@@ -3019,47 +3113,53 @@ GZ3D.Scene.prototype.exportSDF = function() {
 
 // 导出模型SDF
 function exportModelSDF(obj, indent = 0) {
+  const fullName = obj.name || '';
+  const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
+  
+  // 判断是否为复合模型
+  if (isCompositeModel(obj)) {
+    return exportComplexModelSDF(obj, indent);
+  }
+  
   const indentStr = ' '.repeat(indent);
   let sdf = '';
   
-  // 获取模型名称
-  const fullName = obj.name || '';
-  const modelName = fullName.replace(/(_\d+)?$/, '');
+  // 获取位置和旋转信息
+  let position = obj.position;
+  let quaternion = obj.quaternion;
   
-  sdf += `${indentStr}<model name="${modelName}">\n`;
-  
-  // 添加pose
-  sdf += `${indentStr}  <pose>${obj.position.x} ${obj.position.y} ${obj.position.z} 0 0 0</pose>\n`;
-  
-  // 对于复合模型，我们需要特殊处理
-  if (isCompositeModel(obj)) {
-    // 静态模型
-    sdf += `${indentStr}  <static>1</static>\n`;
+  // 如果userData中有保存的位置和旋转信息，优先使用
+  if (obj.userData) {
+    if (obj.userData.originalPosition) {
+      // 使用保存的位置信息
+      position = new THREE.Vector3(
+        obj.userData.originalPosition.x,
+        obj.userData.originalPosition.y,
+        obj.userData.originalPosition.z
+      );
+    }
     
-    // 导出链接
-    sdf += `${indentStr}  <link name="link">\n`;
-    
-    // 添加基本惯性属性
-    sdf += `${indentStr}    <inertial>\n`;
-    sdf += `${indentStr}      <mass>1</mass>\n`;
-    sdf += `${indentStr}    </inertial>\n`;
-    
-    // 对于复合模型，我们需要为每个部分导出collision和visual
-    // 这里为简化，我们只导出一个默认的collision和visual
-    sdf += exportDefaultCollisionSDF(obj, indent + 4);
-    sdf += exportDefaultVisualSDF(obj, indent + 4);
-    
-    sdf += `${indentStr}    <self_collide>0</self_collide>\n`;
-    sdf += `${indentStr}    <enable_wind>0</enable_wind>\n`;
-    sdf += `${indentStr}    <kinematic>0</kinematic>\n`;
-    sdf += `${indentStr}  </link>\n`;
-  } else {
-    // 为基本几何体或网格模型导出链接
-    sdf += exportLinkSDF(obj, indent + 2);
+    if (obj.userData.originalQuaternion) {
+      // 使用保存的旋转信息
+      quaternion = new THREE.Quaternion(
+        obj.userData.originalQuaternion.x,
+        obj.userData.originalQuaternion.y,
+        obj.userData.originalQuaternion.z,
+        obj.userData.originalQuaternion.w
+      );
+    }
   }
   
-  sdf += `${indentStr}</model>\n`;
+  // 将四元数转换为欧拉角
+  const euler = new THREE.Euler().setFromQuaternion(quaternion);
   
+  sdf += `${indentStr}<model name="${modelName}">\n`;
+  sdf += `${indentStr}  <pose>${position.x} ${position.y} ${position.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
+  
+  // 为基本几何体或网格模型导出链接
+  sdf += exportLinkSDF(obj, indent + 2);
+  
+  sdf += `${indentStr}</model>\n`;
   return sdf;
 }
 
@@ -3241,52 +3341,55 @@ function exportVisualSDF(visualObj, indent = 0) {
 
 // 导出几何体SDF
 function exportGeometrySDF(obj, indent = 0) {
-  let sdf = '';
   const indentStr = ' '.repeat(indent);
+  let sdf = '';
   
-  // 获取模型名称（移除数字后缀）
-  const fullName = obj.name || '';
-  const modelName = fullName.replace(/(_\d+)?$/, '').toLowerCase();
-  
-  // 简单几何体处理
   if (isSimpleShape(obj, 'box')) {
     sdf += `${indentStr}<box>\n`;
     sdf += `${indentStr}  <size>1 1 1</size>\n`;
     sdf += `${indentStr}</box>\n`;
-    return sdf;
   } else if (isSimpleShape(obj, 'sphere')) {
     sdf += `${indentStr}<sphere>\n`;
     sdf += `${indentStr}  <radius>0.5</radius>\n`;
     sdf += `${indentStr}</sphere>\n`;
-    return sdf;
   } else if (isSimpleShape(obj, 'cylinder')) {
     sdf += `${indentStr}<cylinder>\n`;
     sdf += `${indentStr}  <radius>0.5</radius>\n`;
     sdf += `${indentStr}  <length>1</length>\n`;
     sdf += `${indentStr}</cylinder>\n`;
-    return sdf;
-  }
-  
-  // 网格模型处理
-  if (isMeshModel(obj)) {
-    // 使用完整模型名（只去除数字后缀，不拆分下划线）
-    // 不再使用 modelName.split('_')[0]
-    
-    // 使用通用方法获取有效的模型名称
-    const validModelName = getValidModelName(modelName);
+  } else if (isMeshModel(obj)) {
+    // 获取有效的模型名称，确保URI正确
+    const modelName = getValidModelName(obj.name);
     
     sdf += `${indentStr}<mesh>\n`;
-    // 使用校验后的模型名生成路径
-    sdf += `${indentStr}  <uri>model://${validModelName}/meshes/${validModelName}.dae</uri>\n`;
-    sdf += `${indentStr}  <scale>1 1 1</scale>\n`;
+    sdf += `${indentStr}  <uri>model://${modelName}/meshes/${modelName}.dae</uri>\n`;
+    
+    // 从userData获取原始缩放，如果存在
+    let scale = { x: 1, y: 1, z: 1 };
+    
+    if (obj.userData && obj.userData.originalScale) {
+      scale = obj.userData.originalScale;
+      console.log(`使用保存的缩放信息: ${scale.x},${scale.y},${scale.z}`);
+    } else {
+      // 如果没有保存的缩放信息，使用当前对象的缩放
+      scale = { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z };
+      console.log(`使用当前对象缩放信息: ${scale.x},${scale.y},${scale.z}`);
+    }
+    
+    // 对特定模型使用预定义的缩放值
+    if (modelName === 'fast_food') {
+      scale = { x: 3, y: 3, z: 2 };
+      console.log(`使用预定义的缩放信息(fast_food): 3,3,2`);
+    }
+    
+    sdf += `${indentStr}  <scale>${scale.x} ${scale.y} ${scale.z}</scale>\n`;
     sdf += `${indentStr}</mesh>\n`;
-    return sdf;
+  } else {
+    // 默认为盒子模型
+    sdf += `${indentStr}<box>\n`;
+    sdf += `${indentStr}  <size>1 1 1</size>\n`;
+    sdf += `${indentStr}</box>\n`;
   }
-  
-  // 默认为盒子几何体（防止未识别类型）
-  sdf += `${indentStr}<box>\n`;
-  sdf += `${indentStr}  <size>1 1 1</size>\n`;
-  sdf += `${indentStr}</box>\n`;
   
   return sdf;
 }
@@ -3862,3 +3965,324 @@ function exportModelSDF(obj, indent = 0) {
   sdf += `${indentStr}</model>\n`;
   return sdf;
 }
+
+/**
+ * 通用获取模型缩放比例的函数
+ * 会尝试多种方法获取模型的原始缩放比例
+ * @param {string} modelName - 模型名称
+ * @param {object} obj - 模型对象
+ * @returns {object} - 包含x, y, z缩放值的对象
+ */
+function getModelScale(modelName, obj) {
+  // 默认缩放比例
+  const defaultScale = { x: 1, y: 1, z: 1 };
+  
+  // 1. 首先检查是否在对象的userData中保存了缩放信息
+  if (obj.userData && obj.userData.originalScale) {
+    console.log("nice job");
+    return {
+      x: obj.userData.originalScale.x || 1,
+      y: obj.userData.originalScale.y || 1,
+      z: obj.userData.originalScale.z || 1
+    };
+  }
+  
+  // 2. 从模型的manifest.xml文件中读取缩放信息
+  const scale = readScaleFromManifest(modelName);
+  if (scale) {
+    return scale;
+  }
+  
+  // 3. 从模型的SDF文件中读取缩放信息
+  const sdfScale = readScaleFromSDF(modelName);
+  if (sdfScale) {
+    return sdfScale;
+  }
+  
+  // 4. 使用当前对象的缩放属性（如果有效）
+  if (obj.scale && obj.scale.x && obj.scale.y && obj.scale.z) {
+    // 如果缩放不是默认值，则返回
+    if (obj.scale.x !== 1 || obj.scale.y !== 1 || obj.scale.z !== 1) {
+      return {
+        x: obj.scale.x,
+        y: obj.scale.y,
+        z: obj.scale.z
+      };
+    }
+  }
+  
+  // 5. 根据模型类型返回合理的默认值
+  const typeBasedScale = getScaleByModelType(modelName);
+  if (typeBasedScale) {
+    return typeBasedScale;
+  }
+  
+  // 6. 如果以上方法都失败，返回默认缩放
+  return defaultScale;
+}
+
+/**
+ * 从模型的manifest.xml文件中读取缩放信息
+ * @param {string} modelName - 模型名称
+ * @returns {object|null} - 包含缩放信息的对象，或null
+ */
+function readScaleFromManifest(modelName) {
+  // 获取模型目录路径
+  const modelPath = `assets/${modelName}`;
+  
+  try {
+    // 尝试读取模型的manifest.xml文件
+    // 注意：这里假设我们在浏览器环境下运行，需要使用异步方式
+    // 在实际实现中，你可能需要使用同步方法或缓存机制
+    
+    // 使用缓存的manifest数据
+    if (window.manifestCache && window.manifestCache[modelName]) {
+      const manifestData = window.manifestCache[modelName];
+      if (manifestData.scale) {
+        return {
+          x: parseFloat(manifestData.scale.x) || 1,
+          y: parseFloat(manifestData.scale.y) || 1,
+          z: parseFloat(manifestData.scale.z) || 1
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn(`Failed to read scale from manifest for model ${modelName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * 从模型的SDF文件中读取缩放信息
+ * @param {string} modelName - 模型名称
+ * @returns {object|null} - 包含缩放信息的对象，或null
+ */
+function readScaleFromSDF(modelName) {
+  // 获取模型目录路径
+  const modelPath = `assets/${modelName}`;
+  
+  try {
+    // 尝试读取模型的model.sdf文件
+    // 注意：这里假设我们在浏览器环境下运行，需要使用异步方式
+    // 在实际实现中，你可能需要使用同步方法或缓存机制
+    
+    // 使用缓存的SDF数据
+    if (window.sdfCache && window.sdfCache[modelName]) {
+      const sdfData = window.sdfCache[modelName];
+      
+      // 解析SDF中的缩放信息
+      // 这里假设SDF已经被解析为可操作的对象
+      if (sdfData.model && sdfData.model.link && sdfData.model.link.visual) {
+        const visual = sdfData.model.link.visual;
+        if (visual.geometry && visual.geometry.mesh && visual.geometry.mesh.scale) {
+          const scaleStr = visual.geometry.mesh.scale;
+          const scaleParts = scaleStr.split(/\s+/);
+          if (scaleParts.length >= 3) {
+            return {
+              x: parseFloat(scaleParts[0]) || 1,
+              y: parseFloat(scaleParts[1]) || 1,
+              z: parseFloat(scaleParts[2]) || 1
+            };
+          }
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn(`Failed to read scale from SDF for model ${modelName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * 根据模型类型返回合理的默认缩放值
+ * @param {string} modelName - 模型名称
+ * @returns {object|null} - 包含缩放信息的对象，或null
+ */
+function getScaleByModelType(modelName) {
+  // 根据模型名称中的关键词判断模型类型
+  console.log("getScaleByModelType");
+  const name = modelName.toLowerCase();
+  
+  // 建筑类模型通常较大
+  if (name.includes('building') || name.includes('house') || 
+      name.includes('station') || name.includes('office') ||
+      name.includes('store') || name.includes('cafe') ||
+      name.includes('fast_food')) {
+    return { x: 3, y: 3, z: 2 };
+  }
+  
+  // 车辆类模型通常中等大小
+  if (name.includes('car') || name.includes('truck') || 
+      name.includes('vehicle') || name.includes('ambulance') ||
+      name.includes('bus')) {
+    return { x: 1.5, y: 1.5, z: 1.5 };
+  }
+  
+  // 人物模型通常较小
+  if (name.includes('person') || name.includes('human') ||
+      name.includes('walking') || name.includes('standing')) {
+    return { x: 1, y: 1, z: 1 };
+  }
+  
+  // 家具类模型通常中等大小
+  if (name.includes('table') || name.includes('chair') ||
+      name.includes('desk') || name.includes('shelf') ||
+      name.includes('bookshelf')) {
+    return { x: 1.2, y: 1.2, z: 1.2 };
+  }
+  
+  return null;
+}
+
+// 修改exportGeometrySDF函数，使用通用的getModelScale函数
+function exportGeometrySDF(obj, indent = 0) {
+  const indentStr = ' '.repeat(indent);
+  let sdf = '';
+  
+  if (isSimpleShape(obj, 'box')) {
+    sdf += `${indentStr}<box>\n`;
+    sdf += `${indentStr}  <size>1 1 1</size>\n`;
+    sdf += `${indentStr}</box>\n`;
+  } else if (isSimpleShape(obj, 'sphere')) {
+    sdf += `${indentStr}<sphere>\n`;
+    sdf += `${indentStr}  <radius>0.5</radius>\n`;
+    sdf += `${indentStr}</sphere>\n`;
+  } else if (isSimpleShape(obj, 'cylinder')) {
+    sdf += `${indentStr}<cylinder>\n`;
+    sdf += `${indentStr}  <radius>0.5</radius>\n`;
+    sdf += `${indentStr}  <length>1</length>\n`;
+    sdf += `${indentStr}</cylinder>\n`;
+  } else if (isMeshModel(obj)) {
+    // 获取有效的模型名称，确保URI正确
+    const modelName = getValidModelName(obj.name);
+    
+    sdf += `${indentStr}<mesh>\n`;
+    sdf += `${indentStr}  <uri>model://${modelName}/meshes/${modelName}.dae</uri>\n`;
+    
+    // 使用通用函数获取模型缩放
+    const scale = getModelScale(modelName, obj);
+    
+    sdf += `${indentStr}  <scale>${scale.x} ${scale.y} ${scale.z}</scale>\n`;
+    sdf += `${indentStr}</mesh>\n`;
+  } else {
+    // 默认为盒子模型
+    sdf += `${indentStr}<box>\n`;
+    sdf += `${indentStr}  <size>1 1 1</size>\n`;
+    sdf += `${indentStr}</box>\n`;
+  }
+  
+  return sdf;
+}
+
+/**
+ * 在模型加载时保存缩放信息
+ * 这个函数应该在模型加载过程中调用
+ * @param {object} obj - 加载的模型对象
+ * @param {string} modelName - 模型名称
+ */
+function saveModelScaleInfo(obj, modelName) {
+  // 获取模型的原始缩放信息
+  const scale = getModelScale(modelName, obj);
+  
+  // 保存到对象的userData中，以便后续导出时使用
+  if (!obj.userData) {
+    obj.userData = {};
+  }
+  
+  obj.userData.originalScale = scale;
+  
+  // 应用缩放
+  obj.scale.set(scale.x, scale.y, scale.z);
+}
+
+// 建立一个缓存系统，用于存储已读取的模型缩放信息
+if (typeof window !== 'undefined' && !window.modelScaleCache) {
+  window.modelScaleCache = {};
+  window.manifestCache = {};
+  window.sdfCache = {};
+}
+
+/**
+ * 将模型缩放信息添加到缓存
+ * @param {string} modelName - 模型名称
+ * @param {object} scale - 缩放信息对象
+ */
+function cacheModelScale(modelName, scale) {
+  if (typeof window !== 'undefined') {
+    window.modelScaleCache[modelName] = scale;
+  }
+}
+
+/**
+ * 从缓存中获取模型缩放信息
+ * @param {string} modelName - 模型名称
+ * @returns {object|null} - 缩放信息对象，如果不存在则返回null
+ */
+function getModelScaleFromCache(modelName) {
+  if (typeof window !== 'undefined' && window.modelScaleCache[modelName]) {
+    return window.modelScaleCache[modelName];
+  }
+  return null;
+}
+
+/**
+ * 改进的保存模型变换信息函数
+ * 确保正确保存包括z轴在内的所有位置信息
+ * @param {THREE.Object3D} obj - 加载的模型对象
+ * @param {string} [modelUri] - 模型URI，用于查找原始缩放信息
+ */
+GZ3D.Scene.prototype.saveModelTransformInfo = function(obj, modelUri) {
+  // 如果对象为空，直接返回
+  if (!obj) {
+    return;
+  }
+  
+  // 确保userData对象存在
+  if (!obj.userData) {
+    obj.userData = {};
+  }
+  
+  // 更新模型的世界矩阵
+  obj.updateMatrixWorld(true);
+  
+  // 获取当前的世界位置和旋转
+  const worldPosition = new THREE.Vector3();
+  const worldQuaternion = new THREE.Quaternion();
+  const worldScale = new THREE.Vector3();
+  
+  // 分解世界矩阵以获取精确的世界坐标位置和旋转
+  obj.matrixWorld.decompose(worldPosition, worldQuaternion, worldScale);
+  
+  // 保存当前的缩放信息
+  obj.userData.originalScale = {
+    x: worldScale.x,
+    y: worldScale.y,
+    z: worldScale.z
+  };
+  
+  // 保存当前的世界位置信息
+  obj.userData.originalPosition = {
+    x: worldPosition.x,
+    y: worldPosition.y,
+    z: worldPosition.z
+  };
+  
+  // 保存当前的世界旋转信息
+  obj.userData.originalQuaternion = {
+    x: worldQuaternion.x,
+    y: worldQuaternion.y,
+    z: worldQuaternion.z,
+    w: worldQuaternion.w
+  };
+  
+  // 保存模型URI
+  if (modelUri) {
+    obj.userData.modelUri = modelUri;
+  }
+  
+  console.log(`保存模型[${obj.name}]变换信息: position=${worldPosition.x},${worldPosition.y},${worldPosition.z} scale=${worldScale.x},${worldScale.y},${worldScale.z}`);
+};
