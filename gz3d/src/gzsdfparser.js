@@ -863,18 +863,62 @@ GZ3D.SdfParser.prototype.spawnFromSDF = function(sdf)
     return;
   }
 
+  // 检查是否是已知的复合模型
+  var isKnownComplex = false;
+  if (sdfObj.model && sdfObj.model['@name']) {
+    var modelName = sdfObj.model['@name'].toLowerCase();
+    if (modelName.indexOf('bookshelf') >= 0 || 
+        modelName.indexOf('table') >= 0 || 
+        modelName.indexOf('cabinet') >= 0 ||
+        modelName.indexOf('shelf') >= 0 ||
+        modelName.indexOf('simple_arm') >= 0) {
+      isKnownComplex = true;
+    }
+  }
+
+  var obj;
   if (sdfObj.model)
   {
-    return this.spawnModelFromSDF(sdfObj);
+    obj = this.spawnModelFromSDF(sdfObj);
+    
+    // 如果是已知的复合模型，强制设置类型
+    if (isKnownComplex && obj) {
+      if (!obj.userData) obj.userData = {};
+      obj.userData.modelType = 'complex';
+    }
   }
   else if (sdfObj.light)
   {
-    return this.spawnLightFromSDF(sdfObj);
+    obj = this.spawnLightFromSDF(sdfObj);
   }
   else if (sdfObj.world)
   {
-    return this.spawnWorldFromSDF(sdfObj);
+    obj = this.spawnWorldFromSDF(sdfObj);
   }
+  
+  // 确保所有模型都设置了userData
+  if (obj) {
+    // 递归处理所有子对象
+    var that = this;
+    obj.traverse(function(child) {
+      if (child.type === 'Object3D' && child.name) {
+        that.setupModelUserData(child, child.name);
+        
+        // 特殊检查bookshelf和其他已知复合模型
+        if (child.name && 
+            (child.name.toLowerCase().indexOf('bookshelf') >= 0 ||
+             child.name.toLowerCase().indexOf('table') >= 0 ||
+             child.name.toLowerCase().indexOf('cabinet') >= 0 ||
+             child.name.toLowerCase().indexOf('shelf') >= 0 ||
+             child.name.toLowerCase().indexOf('simple_arm') >= 0)) {
+          if (!child.userData) child.userData = {};
+          child.userData.modelType = 'complex';
+        }
+      }
+    });
+  }
+  
+  return obj;
 };
 
 /**
@@ -922,7 +966,14 @@ GZ3D.SdfParser.prototype.loadSDF = function(sdfName)
   if (!sdf) {
     return;
   }
-  return this.spawnFromSDF(sdf);
+  var obj = this.spawnFromSDF(sdf);
+  
+  // 确保设置了userData
+  if (obj) {
+    this.setupModelUserData(obj, obj.name || sdfName);
+  }
+  
+  return obj;
 };
 
 /**
@@ -982,6 +1033,9 @@ GZ3D.SdfParser.prototype.spawnModelFromSDF = function(sdfObj)
       }
     }
   }
+
+  // 设置模型userData
+  this.setupModelUserData(modelObj, modelObj.name);
 
   this.scene.saveModelTransformInfo(modelObj);
   return modelObj;
@@ -1045,6 +1099,10 @@ GZ3D.SdfParser.prototype.spawnWorldFromSDF = function(sdfObj)
                 var pose = this.parsePose(incObj.pose);
                 this.scene.setPose(obj, pose.position, pose.orientation);
               }
+              
+              // 设置模型userData
+              this.setupModelUserData(obj, obj.name);
+              
               worldObj.add(obj);
             }
             break;
@@ -1067,6 +1125,10 @@ GZ3D.SdfParser.prototype.spawnWorldFromSDF = function(sdfObj)
     {
       var tmpModelObj = {model: sdfObj.world.model[j]};
       var modelObj = this.spawnModelFromSDF(tmpModelObj);
+      
+      // 设置模型userData
+      this.setupModelUserData(modelObj, modelObj.name);
+      
       worldObj.add(modelObj);
     }
   }
@@ -1418,3 +1480,268 @@ GZ3D.SdfParser.prototype.getModelScale = function(modelName) {
   // 默认返回 1,1,1
   return { x: 1, y: 1, z: 1 };
 };
+
+/**
+ * 获取模型的默认X轴偏移
+ * @param {string} modelName - 模型名称
+ * @returns {number} - x 轴偏移
+ */
+GZ3D.SdfParser.prototype.getModelXOffset = function(modelName) {
+  // 模型X轴偏移表
+  var modelXOffsets = {
+    'fast_food': 0,
+    'house_1': 0,
+    'gas_station': 0,
+    'ambulance': 0,
+    'person_standing': 0,
+    'person_walking': 0,
+    'table': 0,
+    'table_marble': 0
+    // 可以根据需要添加更多模型
+  };
+  
+  // 检查是否有预定义偏移
+  for (var key in modelXOffsets) {
+    if (modelName === key || modelName.indexOf(key) === 0) {
+      return modelXOffsets[key];
+    }
+  }
+  
+  // 默认返回 0
+  return 0;
+};
+
+/**
+ * 获取模型的默认Y轴偏移
+ * @param {string} modelName - 模型名称
+ * @returns {number} - y 轴偏移
+ */
+GZ3D.SdfParser.prototype.getModelYOffset = function(modelName) {
+  // 模型Y轴偏移表
+  var modelYOffsets = {
+    'fast_food': 0,
+    'house_1': 0,
+    'gas_station': 0,
+    'ambulance': 0,
+    'person_standing': 0,
+    'person_walking': 0,
+    'table': 0,
+    'table_marble': 0
+    // 可以根据需要添加更多模型
+  };
+  
+  // 检查是否有预定义偏移
+  for (var key in modelYOffsets) {
+    if (modelName === key || modelName.indexOf(key) === 0) {
+      return modelYOffsets[key];
+    }
+  }
+  
+  // 默认返回 0
+  return 0;
+};
+
+/**
+ * 为模型添加必要的userData属性
+ * @param {THREE.Object3D} obj - 模型对象
+ * @param {string} modelName - 模型名称
+ * @param {GZ3D.SdfParser} sdfParser - SDF解析器实例
+ */
+GZ3D.SdfParser.prototype.setupModelUserData = function(obj, modelName) {
+  if (!obj.userData) {
+    obj.userData = {};
+  }
+
+  // 如果已设置modelType且不是通过先前版本的逻辑设置的，则尊重现有设置
+  if (obj.userData.modelType && obj.userData.modelType !== 'easy') {
+    return;
+  }
+
+  // 获取基础模型名
+  var baseModelName = getBaseModelName(modelName);
+  
+  // 判断模型类型
+  var modelType = 'mesh'; // 默认为mesh类型
+  
+  // 首先检查是否为复合模型，优先判断名称匹配
+  if (isCompositeName(baseModelName)) {
+    modelType = 'complex';
+  } 
+  // 然后检查是否为简单几何体
+  else if (isEasyShape(obj)) {
+    modelType = 'easy';
+  }
+  
+  // 检查复杂模型的特征：多个collision或visual元素
+  var visualCount = 0;
+  var collisionCount = 0;
+  obj.traverse(function(child) {
+    if (child.name && child.name.toLowerCase().indexOf('visual') >= 0) {
+      visualCount++;
+    }
+    if (child.name && child.name.toLowerCase().indexOf('collision') >= 0) {
+      collisionCount++;
+    }
+  });
+  
+  // 如果有多个collision或visual，强制标记为复合模型
+  if (visualCount > 1 || collisionCount > 1) {
+    modelType = 'complex';
+  }
+  
+  // 设置基本属性
+  obj.userData.modelType = modelType;
+  obj.userData.baseModelName = baseModelName;
+  
+  // 获取偏移量
+  var xOffset = 0;
+  var yOffset = 0;
+  var zOffset = 0;
+  
+  // 根据模型类型设置偏移量
+  if (modelType === 'mesh') {
+    // X轴偏移
+    if (this.getModelXOffset) {
+      xOffset = this.getModelXOffset(baseModelName);
+    }
+    
+    // Y轴偏移
+    if (this.getModelYOffset) {
+      yOffset = this.getModelYOffset(baseModelName);
+    }
+    
+    // Z轴偏移
+    if (this.getModelZOffset) {
+      zOffset = this.getModelZOffset(baseModelName);
+    }
+    
+    // 缩放
+    var defaultScale = this.getModelScale(baseModelName);
+    obj.userData.defaultScale = defaultScale;
+  } else if (modelType === 'easy') {
+    // 简单模型默认有z轴偏移
+    zOffset = 0.5;
+  }
+  
+  obj.userData.modelXOffset = xOffset;
+  obj.userData.modelYOffset = yOffset;
+  obj.userData.modelZOffset = zOffset;
+  
+  // 保存原始变换信息
+  if (!obj.userData.originalScale) {
+    obj.userData.originalScale = {
+      x: obj.scale.x,
+      y: obj.scale.y,
+      z: obj.scale.z
+    };
+  }
+  
+  if (!obj.userData.originalPosition) {
+    obj.userData.originalPosition = {
+      x: obj.position.x,
+      y: obj.position.y,
+      z: obj.position.z
+    };
+  }
+  
+  if (!obj.userData.originalQuaternion) {
+    obj.userData.originalQuaternion = {
+      x: obj.quaternion.x,
+      y: obj.quaternion.y,
+      z: obj.quaternion.z,
+      w: obj.quaternion.w
+    };
+  }
+};
+
+/**
+ * 检查模型名称是否为复合模型
+ * @param {string} modelName - 模型名称
+ * @returns {boolean} - 是否为复合模型
+ */
+function isCompositeName(modelName) {
+  // 先检查名称是否直接匹配已知的复合模型列表
+  var compositeModels = [
+    'bookshelf', 'table', 'table_marble', 'chair',
+    'cabinet', 'shelf', 'desk', 'simple_arm',
+    'simple_arm_gripper', 'simple_gripper'
+  ];
+  
+  // 转换为小写并移除数字后缀进行比较
+  var normalizedName = modelName.toLowerCase().replace(/_\d+$/, '');
+  
+  // 检查是否在复合模型列表中
+  for (var i = 0; i < compositeModels.length; i++) {
+    if (normalizedName === compositeModels[i] || 
+        normalizedName.indexOf(compositeModels[i]) === 0) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * 判断对象是否为简单几何体
+ * @param {THREE.Object3D} object - 要检测的对象
+ * @returns {boolean} - 是否为简单几何体
+ */
+function isEasyShape(object) {
+  // 如果对象自身被标记为简单几何体，直接返回true
+  if (object.userData && object.userData.modelType === 'easy') {
+    return true;
+  }
+  
+  // 如果对象名称在复合模型列表中，绝不是简单几何体
+  if (object.name && isCompositeName(object.name)) {
+    return false;
+  }
+  
+  // 根据名称判断是否为简单几何体
+  if (object.name) {
+    var name = object.name.toLowerCase();
+    if (name.indexOf('box') >= 0 || 
+        name.indexOf('sphere') >= 0 || 
+        name.indexOf('cylinder') >= 0 || 
+        name.indexOf('light') >= 0) {
+      return true;
+    }
+  }
+  
+  // 计算collision和visual子对象的数量，多于3个的很可能是复合模型
+  var visualCount = 0;
+  var collisionCount = 0;
+  object.traverse(function(child) {
+    if (child.name && child.name.toLowerCase().indexOf('visual') >= 0) {
+      visualCount++;
+    }
+    if (child.name && child.name.toLowerCase().indexOf('collision') >= 0) {
+      collisionCount++;
+    }
+  });
+  
+  // 如果有多个collision或visual，说明是复合模型而非简单几何体
+  if (visualCount > 1 || collisionCount > 1) {
+    return false;
+  }
+  
+  // 检查是否是简单几何体
+  var isSimpleShape = false;
+  object.traverse(function(child) {
+    if (child.geometry) {
+      if (child.geometry instanceof THREE.BoxGeometry || 
+          child.geometry instanceof THREE.SphereGeometry || 
+          child.geometry instanceof THREE.CylinderGeometry) {
+        isSimpleShape = true;
+      }
+    }
+    
+    // 检查是否是灯光
+    if (child instanceof THREE.Light || 
+        (child.children && child.children.length > 0 && child.children[0] instanceof THREE.Light)) {
+      isSimpleShape = true;
+    }
+  });
+  
+  return isSimpleShape;
+}

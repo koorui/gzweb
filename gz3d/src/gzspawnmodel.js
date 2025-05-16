@@ -54,14 +54,28 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   this.obj = new THREE.Object3D();
   var mesh;
   
-  // 判断是否为简单几何体（方块、球体、圆柱体）
-  var isSimpleGeometry = true;
-  
   // 获取基础模型名（移除数字后缀）
   var baseModelName = getBaseModelName(entity);
   
+  // 初始化userData
+  if (!this.obj.userData) {
+    this.obj.userData = {};
+  }
+  
+  var zOffsetAlreadyApplied = false; // 新增标志，标记z轴偏移是否已应用
+  
+  // 根据模型类型设置不同的模型类型和偏移量
   if (entity === 'box' || entity === 'sphere' || entity === 'cylinder' || 
       entity === 'pointlight' || entity === 'spotlight' || entity === 'directionallight') {
+    // 简单模型
+    this.obj.userData.modelType = 'easy';
+    this.obj.userData.baseModelName = entity;
+    
+    // 简单模型默认偏移
+    this.obj.userData.modelXOffset = 0;
+    this.obj.userData.modelYOffset = 0;
+    this.obj.userData.modelZOffset = 0.5; // 默认高度偏移
+    
     if (entity === 'box')
     {
       mesh = this.scene.createBox(1, 1, 1);
@@ -90,53 +104,77 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
       mesh = this.scene.createLight(3);
     }
   } else {
-    mesh = this.sdfParser.loadSDF(entity);
-    isSimpleGeometry = false; // 复杂模型
+    // 判断是否为复合模型
+    var isComplexModel = isCompositeName(baseModelName);
     
-    // 保存模型信息到 userData
-    if (!this.obj.userData) {
-      this.obj.userData = {};
-    }
-    
-    // 保存模型类型和名称
-    this.obj.userData.modelType = 'mesh';
-    this.obj.userData.baseModelName = baseModelName;
-    
-    // 获取并保存模型的默认 z 轴偏移
-    if (this.sdfParser) {
-      var zOffset = this.sdfParser.getModelZOffset(baseModelName);
-      this.obj.userData.modelZOffset = zOffset;
+    if (isComplexModel) {
+      // 复合模型
+      this.obj.userData.modelType = 'complex';
+      this.obj.userData.baseModelName = baseModelName;
       
-      // 获取并保存默认缩放
-      var defaultScale = this.sdfParser.getModelScale(baseModelName);
-      this.obj.userData.defaultScale = defaultScale;
+      // 复合模型默认偏移
+      this.obj.userData.modelXOffset = 0;
+      this.obj.userData.modelYOffset = 0;
+      this.obj.userData.modelZOffset = 0;
+    } else {
+      // 网格模型
+      this.obj.userData.modelType = 'mesh';
+      this.obj.userData.baseModelName = baseModelName;
+      
+      // 从模型配置获取偏移
+      if (this.sdfParser) {
+        // X轴偏移
+        var xOffset = this.sdfParser.getModelXOffset ? 
+          this.sdfParser.getModelXOffset(baseModelName) : 0;
+        this.obj.userData.modelXOffset = xOffset;
+        
+        // Y轴偏移
+        var yOffset = this.sdfParser.getModelYOffset ? 
+          this.sdfParser.getModelYOffset(baseModelName) : 0;
+        this.obj.userData.modelYOffset = yOffset;
+        
+        // Z轴偏移
+        var zOffset = this.sdfParser.getModelZOffset(baseModelName);
+        this.obj.userData.modelZOffset = zOffset;
+        
+        // 标记z轴偏移已应用，因为mesh模型在loadSDF中已经应用了偏移
+        zOffsetAlreadyApplied = true;
+        
+        // 获取并保存默认缩放
+        var defaultScale = this.sdfParser.getModelScale(baseModelName);
+        this.obj.userData.defaultScale = defaultScale;
+      }
     }
+    
+    mesh = this.sdfParser.loadSDF(entity);
   }
 
   this.obj.name = this.generateUniqueName(entity);
   this.obj.add(mesh);
-
-  // 记录是否为简单几何体，用于后续判断
-  this.obj.userData.isSimpleGeometry = isSimpleGeometry;
 
   // temp model appears within current view
   var pos = new THREE.Vector2(window.window.innerWidth/2, window.innerHeight/2);
   var intersect = new THREE.Vector3();
   this.scene.getRayCastModel(pos, intersect);
 
-  this.obj.position.x = intersect.x;
-  this.obj.position.y = intersect.y;
+  this.obj.position.x = intersect.x + (this.obj.userData.modelXOffset || 0);
+  this.obj.position.y = intersect.y + (this.obj.userData.modelYOffset || 0);
   
-  // 只对简单几何体模型添加z轴偏移量
-  if (isSimpleGeometry) {
-    this.obj.position.z += 0.5;
-    console.log('添加z轴偏移量，model=' + entity);
+  // 只有在z轴偏移尚未应用的情况下才应用z轴偏移
+  if (!zOffsetAlreadyApplied) {
+    this.obj.position.z = intersect.z + (this.obj.userData.modelZOffset || 0);
   } else {
-    console.log('不添加z轴偏移量，model=' + entity);
+    // mesh模型已经应用了偏移，直接使用intersect.z
+    this.obj.position.z = intersect.z;
   }
   
+  console.log("模型类型:", this.obj.userData.modelType);
+  console.log("z偏移是否已应用:", zOffsetAlreadyApplied);
+  console.log("this.obj.position.z:", this.obj.position.z);
+  console.log("this.obj.userData.modelZOffset:", this.obj.userData.modelZOffset);
+  
   this.scene.add(this.obj);
-  // console.log('插入后场景对象数：', this.scene.children.length);
+  
   // For the inserted light to have effect
   var allObjects = [];
   this.scene.scene.getDescendants(allObjects);
@@ -159,12 +197,12 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   this.touchEnd = function(event) {that.onTouchEnd(event);};
 
   this.domElement.addEventListener('mousedown', that.mouseDown, false);
-  this.domElement.addEventListener( 'mouseup', that.mouseUp, false);
-  this.domElement.addEventListener( 'mousemove', that.mouseMove, false);
-  document.addEventListener( 'keydown', that.keyDown, false);
+  this.domElement.addEventListener('mouseup', that.mouseUp, false);
+  this.domElement.addEventListener('mousemove', that.mouseMove, false);
+  document.addEventListener('keydown', that.keyDown, false);
 
-  this.domElement.addEventListener( 'touchmove', that.touchMove, false);
-  this.domElement.addEventListener( 'touchend', that.touchEnd, false);
+  this.domElement.addEventListener('touchmove', that.touchMove, false);
+  this.domElement.addEventListener('touchend', that.touchEnd, false);
 
   this.active = true;
 };
@@ -405,55 +443,75 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
   this.callback = callback;
   this.obj = obj;
   
-  // 判断是否为简单几何体
-  var isSimpleGeometry = false;
+  // 确保userData存在
+  if (!this.obj.userData) {
+    this.obj.userData = {};
+  }
   
-  // 检查对象或其子对象是否为简单几何体
-  function checkIfSimpleGeometry(object) {
-    // 如果对象自身被标记为简单几何体
-    if (object.userData && object.userData.isSimpleGeometry) {
-      return true;
-    }
+  var zOffsetAlreadyApplied = false; // 新增标志，标记z轴偏移是否已应用
+  
+  // 确定模型类型及相关属性
+  if (!this.obj.userData.modelType) {
+    // 检查是否为简单几何体
+    var isEasyShape = determineIfEasyShape(obj);
     
-    // 检查是否是简单几何体
-    if (object.geometry && (
-        object.geometry instanceof THREE.BoxGeometry || 
-        object.geometry instanceof THREE.SphereGeometry || 
-        object.geometry instanceof THREE.CylinderGeometry)) {
-      return true;
-    }
-    
-    // 检查是否是灯光
-    if (object instanceof THREE.Light || 
-        (object.children && object.children[0] instanceof THREE.Light)) {
-      return true;
-    }
-    
-    // 检查名称是否包含简单几何体关键词
-    if (object.name && (
-        object.name.toLowerCase().indexOf('box') >= 0 ||
-        object.name.toLowerCase().indexOf('sphere') >= 0 ||
-        object.name.toLowerCase().indexOf('ball') >= 0 ||
-        object.name.toLowerCase().indexOf('cylinder') >= 0 ||
-        object.name.toLowerCase().indexOf('light') >= 0)) {
-      return true;
-    }
-    
-    // 递归检查子对象
-    if (object.children) {
-      for (var i = 0; i < object.children.length; i++) {
-        if (checkIfSimpleGeometry(object.children[i])) {
-          return true;
+    if (isEasyShape) {
+      // 简单模型
+      this.obj.userData.modelType = 'easy';
+      this.obj.userData.baseModelName = obj.name.split('_')[0];
+      
+      // 简单模型默认偏移
+      this.obj.userData.modelXOffset = 0;
+      this.obj.userData.modelYOffset = 0;
+      this.obj.userData.modelZOffset = 0.5; // 默认高度偏移
+    } else {
+      // 判断是否为复合模型
+      var isComplexModel = isCompositeName(obj.name.split('_')[0]);
+      
+      if (isComplexModel) {
+        // 复合模型
+        this.obj.userData.modelType = 'complex';
+        this.obj.userData.baseModelName = obj.name.split('_')[0];
+        
+        // 复合模型默认偏移
+        this.obj.userData.modelXOffset = 0;
+        this.obj.userData.modelYOffset = 0;
+        this.obj.userData.modelZOffset = 0;
+      } else {
+        // 网格模型
+        this.obj.userData.modelType = 'mesh';
+        var baseModelName = obj.name.split('_')[0];
+        this.obj.userData.baseModelName = baseModelName;
+        
+        // 从模型配置获取偏移
+        if (this.sdfParser) {
+          // X轴偏移
+          var xOffset = this.sdfParser.getModelXOffset ? 
+            this.sdfParser.getModelXOffset(baseModelName) : 0;
+          this.obj.userData.modelXOffset = xOffset;
+          
+          // Y轴偏移
+          var yOffset = this.sdfParser.getModelYOffset ? 
+            this.sdfParser.getModelYOffset(baseModelName) : 0;
+          this.obj.userData.modelYOffset = yOffset;
+          
+          // Z轴偏移
+          var zOffset = this.sdfParser.getModelZOffset(baseModelName);
+          this.obj.userData.modelZOffset = zOffset;
+          
+          // 标记z轴偏移已应用，导入的mesh模型已经应用了偏移
+          zOffsetAlreadyApplied = true;
+          
+          // 获取并保存默认缩放
+          var defaultScale = this.sdfParser.getModelScale(baseModelName);
+          this.obj.userData.defaultScale = defaultScale;
         }
       }
     }
-    
-    return false;
+  } else if (this.obj.userData.modelType === 'mesh') {
+    // 如果已经设置了modelType为mesh，则也认为z轴偏移已应用
+    zOffsetAlreadyApplied = true;
   }
-  
-  // 检查并设置是否为简单几何体
-  isSimpleGeometry = checkIfSimpleGeometry(obj);
-  obj.userData.isSimpleGeometry = isSimpleGeometry;
 
   // 递归唯一命名，避免多次导入name冲突
   function setUniqueName(obj, prefix) {
@@ -469,18 +527,22 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
   var intersect = new THREE.Vector3();
   this.scene.getRayCastModel(pos, intersect);
 
-  this.obj.position.x = intersect.x;
-  this.obj.position.y = intersect.y;
+  this.obj.position.x = intersect.x + (this.obj.userData.modelXOffset || 0);
+  this.obj.position.y = intersect.y + (this.obj.userData.modelYOffset || 0);
   
-  // 只对简单几何体添加z轴偏移量
-  if (isSimpleGeometry) {
-    this.obj.position.z += 0.5;
-    console.log('添加z轴偏移量，是简单几何体');
+  // 只有在z轴偏移尚未应用的情况下才应用z轴偏移
+  if (!zOffsetAlreadyApplied) {
+    this.obj.position.z = intersect.z + (this.obj.userData.modelZOffset || 0);
   } else {
-    console.log('不添加z轴偏移量，是复杂模型');
+    // mesh模型已经应用了偏移，直接使用intersect.z
+    this.obj.position.z = intersect.z;
   }
 
   console.log('spawnFromSDF called, new object:', this.obj);
+  console.log("模型类型:", this.obj.userData.modelType);
+  console.log("z偏移是否已应用:", zOffsetAlreadyApplied);
+  console.log("this.obj.position.z:", this.obj.position.z);
+  console.log("this.obj.userData.modelZOffset:", this.obj.userData.modelZOffset);
 
   this.scene.add(this.obj);
 
@@ -505,6 +567,49 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 };
 
 /**
+ * 判断对象是否为简单几何体
+ * @param {THREE.Object3D} object - 要检测的对象
+ * @returns {boolean} - 是否为简单几何体
+ */
+function determineIfEasyShape(object) {
+  // 如果对象自身被标记为简单几何体
+  if (object.userData && object.userData.modelType === 'easy') {
+    return true;
+  }
+  
+  // 根据名称判断
+  if (object.name) {
+    var name = object.name.toLowerCase();
+    if (name.indexOf('box') >= 0 || 
+        name.indexOf('sphere') >= 0 || 
+        name.indexOf('cylinder') >= 0 || 
+        name.indexOf('light') >= 0) {
+      return true;
+    }
+  }
+  
+  // 检查是否是简单几何体
+  var isSimpleShape = false;
+  object.traverse(function(child) {
+    if (child.geometry) {
+      if (child.geometry instanceof THREE.BoxGeometry || 
+          child.geometry instanceof THREE.SphereGeometry || 
+          child.geometry instanceof THREE.CylinderGeometry) {
+        isSimpleShape = true;
+      }
+    }
+    
+    // 检查是否是灯光
+    if (child instanceof THREE.Light || 
+        (child.children && child.children.length > 0 && child.children[0] instanceof THREE.Light)) {
+      isSimpleShape = true;
+    }
+  });
+  
+  return isSimpleShape;
+}
+
+/**
  * 获取有效的基础模型名称，处理带数字后缀的情况
  * @param {string} entity - 模型名称，可能包含数字后缀
  * @returns {string} - 有效的基础模型名
@@ -512,4 +617,27 @@ GZ3D.SpawnModel.prototype.startFromObject = function(obj, callback)
 function getBaseModelName(entity) {
   // 移除最后的数字后缀，例如 "fast_food_0" -> "fast_food"
   return entity.replace(/_\d+$/, '');
+}
+
+/**
+ * 检查模型名称是否为复合模型
+ * @param {string} modelName - 模型名称
+ * @returns {boolean} - 是否为复合模型
+ */
+function isCompositeName(modelName) {
+  // 已知的复合模型列表
+  var compositeModels = [
+    'bookshelf', 'table', 'table_marble', 'chair',
+    'cabinet', 'shelf', 'desk', 'simple_arm',
+    'simple_arm_gripper', 'simple_gripper'
+  ];
+  
+  // 检查是否在复合模型列表中
+  for (var i = 0; i < compositeModels.length; i++) {
+    if (modelName === compositeModels[i] || modelName.indexOf(compositeModels[i]) === 0) {
+      return true;
+    }
+  }
+  
+  return false;
 }
