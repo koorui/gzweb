@@ -3216,10 +3216,10 @@ function exportMeshModelSDF(obj, indent = 0) {
   sdf += `${greatGrandChildIndentStr}  <script>\n`;
   sdf += `${greatGrandChildIndentStr}    <uri>model://${baseModelName}/materials/scripts</uri>\n`;
   sdf += `${greatGrandChildIndentStr}    <uri>model://${baseModelName}/materials/textures</uri>\n`;
-  sdf += `${greatGrandChildIndentStr}    <name>${baseModelName.charAt(0).toUpperCase() + baseModelName.slice(1)}/Diffuse</name>\n`;
+  sdf += `${greatGrandChildIndentStr}    <name>${formatModelName(baseModelName)}/Diffuse</name>\n`;
   sdf += `${greatGrandChildIndentStr}  </script>\n`;
   sdf += `${greatGrandChildIndentStr}  <shader type='normal_map_tangent_space'>\n`;
-  sdf += `${greatGrandChildIndentStr}    <normal_map>${baseModelName.charAt(0).toUpperCase() + baseModelName.slice(1)}_Normal.png</normal_map>\n`;
+  sdf += `${greatGrandChildIndentStr}    <normal_map>${formatModelName(baseModelName)}_Normal.png</normal_map>\n`;
   sdf += `${greatGrandChildIndentStr}  </shader>\n`;
   sdf += `${greatGrandChildIndentStr}</material>\n`;
   sdf += `${grandChildIndentStr}</visual>\n`;
@@ -3408,61 +3408,6 @@ function getValidModelName(modelName) {
   return modelName;
 }
 
-// 导出链接SDF
-function exportLinkSDF(linkObj, indent = 0) {
-  let sdf = '';
-  const indentStr = ' '.repeat(indent);
-  
-  // 开始链接标签
-  sdf += `${indentStr}<link name='${linkObj.name}'>\n`;
-  
-  // 添加惯性属性
-  sdf += `${indentStr}  <inertial>\n`;
-  sdf += `${indentStr}    <mass>1</mass>\n`;
-  sdf += `${indentStr}    <inertia>\n`;
-  sdf += `${indentStr}      <ixx>0.166667</ixx>\n`;
-  sdf += `${indentStr}      <ixy>0</ixy>\n`;
-  sdf += `${indentStr}      <ixz>0</ixz>\n`;
-  sdf += `${indentStr}      <iyy>0.166667</iyy>\n`;
-  sdf += `${indentStr}      <iyz>0</iyz>\n`;
-  sdf += `${indentStr}      <izz>0.166667</izz>\n`;
-  sdf += `${indentStr}    </inertia>\n`;
-  sdf += `${indentStr}    <pose>0 0 0 0 -0 0</pose>\n`;
-  sdf += `${indentStr}  </inertial>\n`;
-  
-  // 查找或创建碰撞元素
-  const collisionElements = linkObj.children.filter(child => isCollision(child));
-  if (collisionElements.length > 0) {
-    collisionElements.forEach(collisionElement => {
-      sdf += exportCollisionSDF(collisionElement, indent + 2);
-    });
-  } else {
-    // 创建默认碰撞元素
-    sdf += exportDefaultCollisionSDF(linkObj, indent + 2);
-  }
-  
-  // 查找或创建视觉元素
-  const visualElements = linkObj.children.filter(child => isVisual(child));
-  if (visualElements.length > 0) {
-    visualElements.forEach(visualElement => {
-      sdf += exportVisualSDF(visualElement, indent + 2);
-    });
-  } else {
-    // 创建默认视觉元素
-    sdf += exportDefaultVisualSDF(linkObj, indent + 2);
-  }
-  
-  // 添加其他标准属性
-  sdf += `${indentStr}  <self_collide>0</self_collide>\n`;
-  sdf += `${indentStr}  <enable_wind>0</enable_wind>\n`;
-  sdf += `${indentStr}  <kinematic>0</kinematic>\n`;
-  
-  // 结束链接标签
-  sdf += `${indentStr}</link>\n`;
-  
-  return sdf;
-}
-
 // 导出默认碰撞元素SDF
 function exportDefaultCollisionSDF(obj, indent = 0) {
   let sdf = '';
@@ -3556,34 +3501,6 @@ function exportDefaultVisualSDF(obj, indent = 0) {
   return sdf;
 }
 
-// 导出视觉元素SDF
-function exportVisualSDF(visualObj, indent = 0) {
-  let sdf = '';
-  const indentStr = ' '.repeat(indent);
-  
-  sdf += `${indentStr}<visual name='${visualObj.name}'>\n`;
-  
-  // 添加位姿（如果有）
-  if (visualObj.position || visualObj.quaternion) {
-    const pos = visualObj.position || new THREE.Vector3();
-    const quat = visualObj.quaternion || new THREE.Quaternion();
-    const euler = new THREE.Euler().setFromQuaternion(quat);
-    sdf += `${indentStr}  <pose>${pos.x} ${pos.y} ${pos.z} ${euler.x} ${euler.y} ${euler.z}</pose>\n`;
-  }
-  
-  // 添加几何体
-  sdf += `${indentStr}  <geometry>\n`;
-  sdf += exportGeometrySDF(visualObj, indent + 4);
-  sdf += `${indentStr}  </geometry>\n`;
-  
-  // 添加材质
-  sdf += exportStandardMaterialSDF(visualObj, indent + 2);
-  
-  sdf += `${indentStr}</visual>\n`;
-  
-  return sdf;
-}
-
 // 导出几何体SDF
 function exportGeometrySDF(obj, indent = 0) {
   const indentStr = ' '.repeat(indent);
@@ -3640,19 +3557,17 @@ function exportGeometrySDF(obj, indent = 0) {
   return sdf;
 }
 
-// 导出标准材质SDF
-function exportStandardMaterialSDF(visualObj, indent = 0) {
-  let sdf = '';
-  const indentStr = ' '.repeat(indent);
+// 修改格式化模型名称的函数
+function formatModelName(modelName) {
+  if (!modelName) return '';
   
-  sdf += `${indentStr}<material>\n`;
-  sdf += `${indentStr}  <script>\n`;
-  sdf += `${indentStr}    <name>Gazebo/Grey</name>\n`;
-  sdf += `${indentStr}    <uri>file://media/materials/scripts/gazebo.material</uri>\n`;
-  sdf += `${indentStr}  </script>\n`;
-  sdf += `${indentStr}</material>\n`;
+  // 按_分割
+  const parts = modelName.split('_');
   
-  return sdf;
+  // 将每个部分的首字母大写并拼接
+  return parts.map(part => {
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  }).join('');
 }
 
 // 导出灯光SDF
