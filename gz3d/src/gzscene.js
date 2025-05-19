@@ -3977,7 +3977,7 @@ function exportComplexModelSDF(obj, indent = 0) {
     // 跳过不需要的子元素
     if (part.object.name && (part.object.name.includes('joint') || part.object.name.includes('helper'))) {
       continue;
-    }s
+    }
     
     // 使用计算好的相对变换
     const relPos = part.relativePosition;
