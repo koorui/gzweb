@@ -55,8 +55,8 @@ GZ3D.SpawnModel.prototype.start = function(entity, callback)
   var mesh;
   
   // 获取基础模型名（移除数字后缀）
-  var baseModelName = getBaseModelName(entity);
-  
+  var baseModelName = entity;
+  console.log('baseModelName',baseModelName);
   // 初始化userData
   if (!this.obj.userData) {
     this.obj.userData = {};
@@ -617,6 +617,8 @@ function determineIfEasyShape(object) {
 function getBaseModelName(entity) {
   // 删除最后一个下划线及其后面的数字
   // 匹配最后一个"_"后跟数字的部分
+  // console.log('entity',entity);
+  // console.log('entity.replace(/_\d+$/, "")',entity.replace(/_\d+$/, ''));
   return entity.replace(/_\d+$/, '');
 }
 

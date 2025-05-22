@@ -3333,7 +3333,7 @@ function getModelScale(modelName) {
   // 模型缩放表
   var modelScales = {
     'fast_food': { x: 3, y: 3, z: 2 },
-    'house_1': { x: 1, y: 1, z: 1 },
+    'house_1': { x: 1.5, y: 1.5, z: 1.5 },
     'ambulance': { x: 1, y: 1, z: 1 },
     'person_standing': { x: 1, y: 1, z: 1 },
     'person_walking': { x: 1, y: 1, z: 1 }
@@ -3526,22 +3526,13 @@ function exportGeometrySDF(obj, indent = 0) {
     sdf += `${indentStr}<mesh>\n`;
     sdf += `${indentStr}  <uri>model://${modelName}/meshes/${modelName}.dae</uri>\n`;
     
-    // 从userData获取原始缩放，如果存在
-    let scale = { x: 1, y: 1, z: 1 };
+    // 获取模型缩放
+    let scale = getModelScale(modelName);
     
+    // 如果userData中有原始缩放信息，优先使用
     if (obj.userData && obj.userData.originalScale) {
       scale = obj.userData.originalScale;
       console.log(`使用保存的缩放信息: ${scale.x},${scale.y},${scale.z}`);
-    } else {
-      // 如果没有保存的缩放信息，使用当前对象的缩放
-      scale = { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z };
-      console.log(`使用当前对象缩放信息: ${scale.x},${scale.y},${scale.z}`);
-    }
-    
-    // 对特定模型使用预定义的缩放值
-    if (modelName === 'fast_food') {
-      scale = { x: 3, y: 3, z: 2 };
-      console.log(`使用预定义的缩放信息(fast_food): 3,3,2`);
     }
     
     sdf += `${indentStr}  <scale>${scale.x} ${scale.y} ${scale.z}</scale>\n`;
@@ -3559,15 +3550,32 @@ function exportGeometrySDF(obj, indent = 0) {
 
 // 修改格式化模型名称的函数
 function formatModelName(modelName) {
-  if (!modelName) return '';
-  
-  // 按_分割
+  // 按照下划线分割字符串
   const parts = modelName.split('_');
   
-  // 将每个部分的首字母大写并拼接
-  return parts.map(part => {
-    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
-  }).join('');
+  // 处理每个部分
+  const formattedParts = parts.map(part => {
+    // 如果部分是纯数字，保持原样
+    if (/^\d+$/.test(part)) {
+      return part;
+    }
+    // 否则将首字母大写
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  });
+  
+  // 重新组合，如果相邻部分都是数字，用下划线连接
+  let result = '';
+  for (let i = 0; i < formattedParts.length; i++) {
+    if (i > 0) {
+      // 如果当前部分或前一部分是数字，用下划线连接
+      if (/^\d+$/.test(formattedParts[i]) || /^\d+$/.test(formattedParts[i-1])) {
+        result += '_';
+      }
+    }
+    result += formattedParts[i];
+  }
+  
+  return result;
 }
 
 // 导出灯光SDF
@@ -3825,6 +3833,7 @@ function findSimilarModelDirectory(modelName) {
     'ambulance', 'table', 'table_marble', 'person_standing', 'person_walking'
     // ... 添加assets目录中的所有模型目录
   ];
+  
   
   // 1. 尝试完全匹配
   if (availableDirectories.includes(modelName)) {
