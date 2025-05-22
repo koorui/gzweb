@@ -38,7 +38,7 @@ GZ3D.SpawnModel.prototype.init = function()
  */
 GZ3D.SpawnModel.prototype.start = function(entity, callback)
 {
-  console.log("start you???")
+  console.log("start you???",entity)
   if (this.active)
   {
     console.log("Already in spawn mode, ignoring");
@@ -615,7 +615,8 @@ function determineIfEasyShape(object) {
  * @returns {string} - 有效的基础模型名
  */
 function getBaseModelName(entity) {
-  // 移除最后的数字后缀，例如 "fast_food_0" -> "fast_food"
+  // 删除最后一个下划线及其后面的数字
+  // 匹配最后一个"_"后跟数字的部分
   return entity.replace(/_\d+$/, '');
 }
 

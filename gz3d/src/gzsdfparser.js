@@ -400,7 +400,10 @@ GZ3D.SdfParser.prototype.createMaterial = function(material)
           // Map texture name to the corresponding texture.
           if (!this.usingFilesUrls)
           {
-            texture = this.textures[mat.texture];
+            // 兼容jpg和png
+            texture = this.textures[mat.texture] ||
+                      this.textures[mat.texture.replace(/\.png$/i, '.jpg')] ||
+                      this.textures[mat.texture.replace(/\.jpg$/i, '.png')];
           }
           else
           {
@@ -481,6 +484,9 @@ GZ3D.SdfParser.prototype.createMaterial = function(material)
 
     }
   }
+
+  console.log('createMaterial', material, 'result:', mat);
+  console.log('material.texture', texture);
 
   return {
     texture: texture,
@@ -1425,33 +1431,49 @@ GZ3D.SdfParser.prototype.fileFromUrl = function(url)
 };
 
 /**
- * 获取模型的默认高度偏移
+ * 获取模型的Z轴偏移量
  * @param {string} modelName - 模型名称
- * @returns {number} - z 轴高度偏移
+ * @returns {number} - Z轴偏移量
  */
 GZ3D.SdfParser.prototype.getModelZOffset = function(modelName) {
-  // 模型高度偏移表
-  var modelZOffsets = {
-    'fast_food': 3.15931,
-    'house_1': 2.5,
-    'gas_station': 3.0,
-    'ambulance': 0.8,
-    'person_standing': 0.85,
-    'person_walking': 0.85,
-    'table': 0.45,
-    'table_marble': 0.5
-    // 可以根据需要添加更多模型
-  };
+  // 将显示名称转换为目录名
+  var dirName = modelName.toLowerCase().replace(/\s+/g, '_');
   
-  // 检查是否有预定义高度
-  for (var key in modelZOffsets) {
-    if (modelName === key || modelName.indexOf(key) === 0) {
-      return modelZOffsets[key];
+  // 直接构建SDF文件路径
+  var sdfPath = this.MATERIAL_ROOT + '/' + dirName + '/model.sdf';
+  
+  // 使用fileFromUrl直接读取SDF文件
+  var sdfXML = this.fileFromUrl(sdfPath);
+  console.log('sdfpath',sdfPath);
+  console.log('sdfXml',sdfXML);
+  if (sdfXML) {
+    var sdfJson = xml2json(sdfXML, '\t');
+    var sdfObj = JSON.parse(sdfJson).sdf;
+    
+    if (sdfObj && sdfObj.model) {
+      // 检查link的pose
+      if (sdfObj.model.link) {
+        var link = sdfObj.model.link;
+        if (link.pose) {
+          var poseValues = link.pose.split(/\s+/);
+          if (poseValues.length >= 3) {
+            return parseFloat(poseValues[2]); // 返回Z轴偏移量
+          }
+        }
+      }
+      
+      // 检查model的pose
+      if (sdfObj.model.pose) {
+        var poseValues = sdfObj.model.pose.split(/\s+/);
+        if (poseValues.length >= 3) {
+          return parseFloat(poseValues[2]); // 返回Z轴偏移量
+        }
+      }
     }
   }
   
-  // 默认返回 1.0
-  return 1.0;
+  // 如果无法从SDF读取,返回默认值0
+  return 0;
 };
 
 /**
