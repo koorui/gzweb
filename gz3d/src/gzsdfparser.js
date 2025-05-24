@@ -792,6 +792,16 @@ GZ3D.SdfParser.prototype.createGeom = function(geom, mat, parent)
 
           allChildren[c].visible = this.scene.showCollisions;
         }
+
+        // 保存原始缩放信息
+        if (visualObj.userData) {
+          visualObj.userData.originalScale = {
+            x: visualObj.scale.x,
+            y: visualObj.scale.y,
+            z: visualObj.scale.z
+          };
+        }
+
         break;
       }
     }
@@ -1494,6 +1504,7 @@ GZ3D.SdfParser.prototype.getModelScale = function(modelName) {
   
   // 检查是否有预定义缩放
   for (var key in modelScales) {
+    console.log('GZ3D.SdfParser.prototype.getModelScale,key:',key);
     if (modelName === key || modelName.indexOf(key) === 0) {
       return modelScales[key];
     }

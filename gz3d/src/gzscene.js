@@ -3117,6 +3117,7 @@ GZ3D.Scene.prototype.exportSDF = function() {
  */
 function exportModelSDF(obj, indent = 0) {
   // 获取模型类型，未设置则尝试判断
+  console.log("exportModelSDF",obj);
   var modelType = obj.userData && obj.userData.modelType;
   if (!modelType) {
     if (isMeshModel(obj)) {
@@ -3325,33 +3326,6 @@ function exportSimpleModelSDF(obj, indent = 0) {
 }
 
 /**
- * 获取模型缩放
- * @param {string} modelName - 模型名称
- * @returns {object} - 包含x,y,z缩放的对象
- */
-function getModelScale(modelName) {
-  // 模型缩放表
-  var modelScales = {
-    'fast_food': { x: 3, y: 3, z: 2 },
-    'house_1': { x: 1.5, y: 1.5, z: 1.5 },
-    'ambulance': { x: 1, y: 1, z: 1 },
-    'person_standing': { x: 1, y: 1, z: 1 },
-    'person_walking': { x: 1, y: 1, z: 1 }
-    // 可以根据需要添加更多模型
-  };
-  
-  // 检查是否有预定义缩放
-  for (var key in modelScales) {
-    if (modelName === key || modelName.indexOf(key) === 0) {
-      return modelScales[key];
-    }
-  }
-  
-  // 默认返回 1,1,1
-  return { x: 1, y: 1, z: 1 };
-}
-
-/**
  * 检查是否为网格模型
  * @param {THREE.Object3D} obj - 模型对象
  * @returns {boolean} - 是否为网格模型
@@ -3500,54 +3474,6 @@ function exportDefaultVisualSDF(obj, indent = 0) {
   
   return sdf;
 }
-
-// 导出几何体SDF
-function exportGeometrySDF(obj, indent = 0) {
-  const indentStr = ' '.repeat(indent);
-  let sdf = '';
-  
-  if (isSimpleShape(obj, 'box')) {
-    sdf += `${indentStr}<box>\n`;
-    sdf += `${indentStr}  <size>1 1 1</size>\n`;
-    sdf += `${indentStr}</box>\n`;
-  } else if (isSimpleShape(obj, 'sphere')) {
-    sdf += `${indentStr}<sphere>\n`;
-    sdf += `${indentStr}  <radius>0.5</radius>\n`;
-    sdf += `${indentStr}</sphere>\n`;
-  } else if (isSimpleShape(obj, 'cylinder')) {
-    sdf += `${indentStr}<cylinder>\n`;
-    sdf += `${indentStr}  <radius>0.5</radius>\n`;
-    sdf += `${indentStr}  <length>1</length>\n`;
-    sdf += `${indentStr}</cylinder>\n`;
-  } else if (isMeshModel(obj)) {
-    // 获取有效的模型名称，确保URI正确
-    const modelName = getValidModelName(obj.name);
-    
-    sdf += `${indentStr}<mesh>\n`;
-    sdf += `${indentStr}  <uri>model://${modelName}/meshes/${modelName}.dae</uri>\n`;
-    
-    // 获取模型缩放
-    let scale = getModelScale(modelName);
-    
-    // 如果userData中有原始缩放信息，优先使用
-    if (obj.userData && obj.userData.originalScale) {
-      scale = obj.userData.originalScale;
-      console.log(`使用保存的缩放信息: ${scale.x},${scale.y},${scale.z}`);
-    }
-    
-    sdf += `${indentStr}  <scale>${scale.x} ${scale.y} ${scale.z}</scale>\n`;
-    sdf += `${indentStr}</mesh>\n`;
-  } else {
-    // 默认为盒子模型
-    console.log("can't find the model type ,use box model");
-    sdf += `${indentStr}<box>\n`;
-    sdf += `${indentStr}  <size>1 1 1</size>\n`;
-    sdf += `${indentStr}</box>\n`;
-  }
-  
-  return sdf;
-}
-
 // 修改格式化模型名称的函数
 function formatModelName(modelName) {
   // 按照下划线分割字符串
@@ -4144,6 +4070,7 @@ function colorIsWood(color) {
  * @returns {object} - 包含x, y, z缩放值的对象
  */
 function getModelScale(modelName, obj) {
+
   // 默认缩放比例
   const defaultScale = { x: 1, y: 1, z: 1 };
   
@@ -4197,31 +4124,8 @@ function getModelScale(modelName, obj) {
  * @returns {object|null} - 包含缩放信息的对象，或null
  */
 function readScaleFromManifest(modelName) {
-  // 获取模型目录路径
-  const modelPath = `assets/${modelName}`;
-  
-  try {
-    // 尝试读取模型的manifest.xml文件
-    // 注意：这里假设我们在浏览器环境下运行，需要使用异步方式
-    // 在实际实现中，你可能需要使用同步方法或缓存机制
-    
-    // 使用缓存的manifest数据
-    if (window.manifestCache && window.manifestCache[modelName]) {
-      const manifestData = window.manifestCache[modelName];
-      if (manifestData.scale) {
-        return {
-          x: parseFloat(manifestData.scale.x) || 1,
-          y: parseFloat(manifestData.scale.y) || 1,
-          z: parseFloat(manifestData.scale.z) || 1
-        };
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn(`Failed to read scale from manifest for model ${modelName}:`, error);
-    return null;
-  }
+  // 实现从manifest.xml读取缩放信息的逻辑
+  return null;
 }
 
 /**
@@ -4230,41 +4134,8 @@ function readScaleFromManifest(modelName) {
  * @returns {object|null} - 包含缩放信息的对象，或null
  */
 function readScaleFromSDF(modelName) {
-  // 获取模型目录路径
-  const modelPath = `assets/${modelName}`;
-  
-  try {
-    // 尝试读取模型的model.sdf文件
-    // 注意：这里假设我们在浏览器环境下运行，需要使用异步方式
-    // 在实际实现中，你可能需要使用同步方法或缓存机制
-    
-    // 使用缓存的SDF数据
-    if (window.sdfCache && window.sdfCache[modelName]) {
-      const sdfData = window.sdfCache[modelName];
-      
-      // 解析SDF中的缩放信息
-      // 这里假设SDF已经被解析为可操作的对象
-      if (sdfData.model && sdfData.model.link && sdfData.model.link.visual) {
-        const visual = sdfData.model.link.visual;
-        if (visual.geometry && visual.geometry.mesh && visual.geometry.mesh.scale) {
-          const scaleStr = visual.geometry.mesh.scale;
-          const scaleParts = scaleStr.split(/\s+/);
-          if (scaleParts.length >= 3) {
-            return {
-              x: parseFloat(scaleParts[0]) || 1,
-              y: parseFloat(scaleParts[1]) || 1,
-              z: parseFloat(scaleParts[2]) || 1
-            };
-          }
-        }
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn(`Failed to read scale from SDF for model ${modelName}:`, error);
-    return null;
-  }
+  // 实现从SDF文件读取缩放信息的逻辑
+  return null;
 }
 
 /**
@@ -4348,26 +4219,6 @@ function exportGeometrySDF(obj, indent = 0) {
   return sdf;
 }
 
-/**
- * 在模型加载时保存缩放信息
- * 这个函数应该在模型加载过程中调用
- * @param {object} obj - 加载的模型对象
- * @param {string} modelName - 模型名称
- */
-function saveModelScaleInfo(obj, modelName) {
-  // 获取模型的原始缩放信息
-  const scale = getModelScale(modelName, obj);
-  
-  // 保存到对象的userData中，以便后续导出时使用
-  if (!obj.userData) {
-    obj.userData = {};
-  }
-  
-  obj.userData.originalScale = scale;
-  
-  // 应用缩放
-  obj.scale.set(scale.x, scale.y, scale.z);
-}
 
 // 建立一个缓存系统，用于存储已读取的模型缩放信息
 if (typeof window !== 'undefined' && !window.modelScaleCache) {
